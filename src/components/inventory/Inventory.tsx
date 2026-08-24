@@ -256,13 +256,24 @@ export function Inventory() {
         </div>
 
         <button
-          className="primary-button"
-          type="button"
-          onClick={() => {
-            setError("");
-            setShowAddProduct(true);
-          }}
-        >
+  type="button"
+  onClick={() => setShowAddProduct(true)}
+  style={{
+    background: "#111",
+    color: "#fff",
+    border: "none",
+    padding: "14px 24px",
+    cursor: "pointer",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "8px",
+    position: "relative",
+    zIndex: 100,
+  }}
+>
+  <Plus size={18} />
+  Add Product
+</button>
           <Plus size={18} />
           Add Product
         </button>
@@ -297,13 +308,24 @@ export function Inventory() {
             </p>
 
             <button
-              className="primary-button"
-              type="button"
-              onClick={() => {
-                setError("");
-                setShowAddProduct(true);
-              }}
-            >
+  type="button"
+  onClick={() => setShowAddProduct(true)}
+  style={{
+    background: "#111",
+    color: "#fff",
+    border: "none",
+    padding: "14px 24px",
+    cursor: "pointer",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "8px",
+    position: "relative",
+    zIndex: 100,
+  }}
+>
+  <Plus size={18} />
+  Add Your First Product
+</button>
               <Plus size={18} />
               Add Your First Product
             </button>
