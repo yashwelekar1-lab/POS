@@ -100,7 +100,8 @@ export function Inventory() {
   const [products, setProducts] = useState<Product[]>([]);
 
   const [showAddProduct, setShowAddProduct] = useState(false);
-
+const [selectedBarcodeProduct, setSelectedBarcodeProduct] =
+  useState<Product | null>(null);
   const [form, setForm] = useState<ProductForm>(emptyForm);
 
   const [loading, setLoading] = useState(true);
@@ -476,9 +477,14 @@ export function Inventory() {
                     </td>
 
                     <td>
-                      {product.barcode}
-                    </td>
-
+  <button
+    type="button"
+    className="barcode-button"
+    onClick={() => setSelectedBarcodeProduct(product)}
+  >
+    {product.barcode}
+  </button>
+</td>
                     <td>
                       {product.category}
                     </td>
@@ -816,7 +822,196 @@ export function Inventory() {
         </div>
 
       )}
+{selectedBarcodeProduct && (
+  <div
+    className="modal-backdrop"
+    onMouseDown={(event) => {
+      if (event.target === event.currentTarget) {
+        setSelectedBarcodeProduct(null);
+      }
+    }}
+  >
+    <div className="barcode-modal">
+      <div className="modal-header">
+        <div>
+          <span className="section-kicker">
+            PRODUCT BARCODE
+          </span>
 
+          <h2>
+            {selectedBarcodeProduct.name}
+          </h2>
+        </div>
+
+        <button
+          type="button"
+          className="modal-close"
+          onClick={() =>
+            setSelectedBarcodeProduct(null)
+          }
+        >
+          <X size={19} />
+        </button>
+      </div>
+
+      <div className="barcode-preview">
+        <div className="barcode-product-name">
+          {selectedBarcodeProduct.name}
+        </div>
+
+        <svg
+          id="product-barcode"
+          ref={(element) => {
+            if (element) {
+              JsBarcode(
+                element,
+                selectedBarcodeProduct.barcode,
+                {
+                  format: "EAN13",
+                  width: 2,
+                  height: 90,
+                  displayValue: true,
+                  fontSize: 16,
+                  margin: 10,
+                }
+              );
+            }
+          }}
+        />
+
+        <div className="barcode-sku">
+          SKU: {selectedBarcodeProduct.sku}
+        </div>
+
+        <div className="barcode-price">
+          ₹{selectedBarcodeProduct.sellingPrice.toFixed(2)}
+        </div>
+      </div>
+
+      <div className="modal-footer">
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={() =>
+            setSelectedBarcodeProduct(null)
+          }
+        >
+          Close
+        </button>
+
+        <button
+          type="button"
+          className="primary-button"
+          onClick={() => {
+            const barcode =
+              document.getElementById(
+                "product-barcode"
+              )?.outerHTML || "";
+
+            const product =
+              selectedBarcodeProduct;
+
+            const printWindow = window.open(
+              "",
+              "_blank",
+              "width=600,height=500"
+            );
+
+            if (!printWindow) {
+              return;
+            }
+
+            printWindow.document.write(`
+              <!DOCTYPE html>
+              <html>
+                <head>
+                  <title>${product.name} - Barcode</title>
+
+                  <style>
+                    body {
+                      margin: 0;
+                      padding: 30px;
+                      font-family: Arial, sans-serif;
+                      text-align: center;
+                    }
+
+                    .label {
+                      width: 320px;
+                      margin: 0 auto;
+                      padding: 20px;
+                      border: 1px solid #ddd;
+                    }
+
+                    .name {
+                      font-size: 18px;
+                      font-weight: bold;
+                      margin-bottom: 12px;
+                    }
+
+                    .sku {
+                      margin-top: 8px;
+                      font-size: 12px;
+                      color: #555;
+                    }
+
+                    .price {
+                      margin-top: 8px;
+                      font-size: 16px;
+                      font-weight: bold;
+                    }
+
+                    svg {
+                      max-width: 100%;
+                    }
+
+                    @media print {
+                      body {
+                        padding: 0;
+                      }
+
+                      .label {
+                        border: none;
+                      }
+                    }
+                  </style>
+                </head>
+
+                <body>
+                  <div class="label">
+                    <div class="name">
+                      ${product.name}
+                    </div>
+
+                    ${barcode}
+
+                    <div class="sku">
+                      SKU: ${product.sku}
+                    </div>
+
+                    <div class="price">
+                      ₹${product.sellingPrice.toFixed(2)}
+                    </div>
+                  </div>
+
+                  <script>
+                    window.onload = function () {
+                      window.print();
+                    };
+                  </script>
+                </body>
+              </html>
+            `);
+
+            printWindow.document.close();
+          }}
+        >
+          <Printer size={17} />
+          Print Barcode
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     </section>
   );
 }
