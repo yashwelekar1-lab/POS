@@ -6,107 +6,58 @@ import { Analytics } from "./components/analytics/Analytics";
 
 type Tab = "billing" | "inventory" | "analytics";
 
-const navigation = [
-  {
-    id: "billing" as const,
-    label: "Billing",
-    icon: ReceiptText,
-  },
-  {
-    id: "inventory" as const,
-    label: "Inventory",
-    icon: Boxes,
-  },
-  {
-    id: "analytics" as const,
-    label: "Analytics",
-    icon: BarChart3,
-  },
-];
-
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>("billing");
 
-  const activeSection = navigation.find(
-    (item) => item.id === activeTab,
-  );
-
   return (
     <div className="app">
-      <header className="site-header">
+      <header className="app-header">
         <div className="brand">
-          <span className="brand-mark">R</span>
+          <div className="brand-mark">O</div>
 
           <div className="brand-copy">
-            <span className="brand-name">RETAIL</span>
-            <span className="brand-subtitle">POINT OF SALE</span>
+            <div className="brand-name">ORDERLY</div>
+            <div className="brand-subtitle">POINT OF SALE</div>
           </div>
         </div>
 
-        <nav className="main-nav" aria-label="Main navigation">
-          {navigation.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
+        <nav className="main-nav">
+          <button
+            className={activeTab === "billing" ? "active" : ""}
+            onClick={() => setActiveTab("billing")}
+          >
+            <ReceiptText size={16} />
+            <span>Billing</span>
+          </button>
 
-            return (
-              <button
-                key={item.id}
-                type="button"
-                className={`nav-item ${isActive ? "active" : ""}`}
-                onClick={() => setActiveTab(item.id)}
-              >
-                <Icon size={16} strokeWidth={1.7} />
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
+          <button
+            className={activeTab === "inventory" ? "active" : ""}
+            onClick={() => setActiveTab("inventory")}
+          >
+            <Boxes size={16} />
+            <span>Inventory</span>
+          </button>
+
+          <button
+            className={activeTab === "analytics" ? "active" : ""}
+            onClick={() => setActiveTab("analytics")}
+          >
+            <BarChart3 size={16} />
+            <span>Analytics</span>
+          </button>
         </nav>
 
-        <div className="header-status">
-          <span className="status-indicator" />
-          <span>Live</span>
+        <div className="live-status">
+          <span />
+          LIVE
         </div>
       </header>
 
-      <main className="site-main">
-        <div className="section-intro">
-          <div>
-            <span className="section-kicker">RETAIL OPERATIONS</span>
-
-            <h1>{activeSection?.label}</h1>
-
-            <p>
-              {activeTab === "billing" &&
-                "Create and manage your sales with a clean, fast checkout experience."}
-
-              {activeTab === "inventory" &&
-                "Keep your products, pricing and stock organised in one place."}
-
-              {activeTab === "analytics" &&
-                "Understand your sales, products and business performance."}
-            </p>
-          </div>
-
-          <div className="section-number">
-            {activeTab === "billing" && "01"}
-            {activeTab === "inventory" && "02"}
-            {activeTab === "analytics" && "03"}
-          </div>
-        </div>
-
-        <div className="section-content">
-          {activeTab === "billing" && <Billing />}
-
-          {activeTab === "inventory" && <Inventory />}
-
-          {activeTab === "analytics" && <Analytics />}
-        </div>
+      <main className="app-content">
+        {activeTab === "billing" && <Billing />}
+        {activeTab === "inventory" && <Inventory />}
+        {activeTab === "analytics" && <Analytics />}
       </main>
-
-      <footer className="site-footer">
-        <span>RETAIL POS</span>
-        <span>Billing · Inventory · Analytics</span>
-      </footer>
     </div>
   );
 }
