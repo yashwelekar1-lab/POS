@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Package, Plus, Search, X } from "lucide-react";
+import JsBarcode from "jsbarcode";
 import { supabase } from "../../lib/supabase";
 
 type Product = {
