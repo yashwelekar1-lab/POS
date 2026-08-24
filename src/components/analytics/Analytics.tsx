@@ -372,13 +372,14 @@ export function Analytics() {
 
                     <td>{item.gst_rate}%</td>
 
-                    <td>
-                      <strong>
-                        {formatMoney(
-                          Number(item.line_total || 0),
-                        )}
-                      </strong>
-                    </td>
+                   <td>
+  <strong>
+    {formatMoney(
+      Number(item.unit_price || 0) *
+        Number(item.quantity || 0),
+    )}
+  </strong>
+</td>
                   </tr>
                 ))}
               </tbody>
