@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 import {
   Barcode,
   Check,
@@ -81,8 +87,11 @@ export function Billing() {
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   /*
-   * Load products from Supabase.
+   * ---------------------------------------------------------
+   * LOAD PRODUCTS
+   * ---------------------------------------------------------
    */
+
   const loadProducts = async () => {
     setLoading(true);
     setError("");
@@ -90,7 +99,7 @@ export function Billing() {
     const { data, error: fetchError } = await supabase
       .from("products")
       .select(
-        "id,name,sku,barcode,category,selling_price,gst_rate,current_stock"
+        "id,name,sku,barcode,category,selling_price,gst_rate,current_stock",
       )
       .eq("is_active", true)
       .order("name", {
@@ -105,7 +114,7 @@ export function Billing() {
     }
 
     setProducts(
-      ((data || []) as ProductRow[]).map(mapProduct)
+      ((data || []) as ProductRow[]).map(mapProduct),
     );
 
     setLoading(false);
@@ -116,8 +125,11 @@ export function Billing() {
   }, []);
 
   /*
-   * Search products.
+   * ---------------------------------------------------------
+   * SEARCH
+   * ---------------------------------------------------------
    */
+
   const filteredProducts = useMemo(() => {
     const query = search.trim().toLowerCase();
 
@@ -136,13 +148,16 @@ export function Billing() {
   }, [products, search]);
 
   /*
-   * Cart calculations.
+   * ---------------------------------------------------------
+   * CART CALCULATIONS
+   * ---------------------------------------------------------
    */
+
   const subtotal = useMemo(() => {
     return cart.reduce(
       (total, item) =>
         total + item.price * item.quantity,
-      0
+      0,
     );
   }, [cart]);
 
@@ -171,34 +186,37 @@ export function Billing() {
   const grandTotal = useMemo(() => {
     return Math.max(
       0,
-      subtotal + gst - discountAmount
+      subtotal + gst - discountAmount,
     );
   }, [subtotal, gst, discountAmount]);
 
   const totalItems = useMemo(() => {
     return cart.reduce(
       (total, item) => total + item.quantity,
-      0
+      0,
     );
   }, [cart]);
 
   /*
-   * Add product to cart.
+   * ---------------------------------------------------------
+   * ADD PRODUCT TO CART
+   * ---------------------------------------------------------
    */
+
   const addToCart = (product: Product) => {
     setError("");
     setSuccess("");
 
     if (product.currentStock <= 0) {
       setError(
-        `${product.name} is out of stock.`
+        `${product.name} is out of stock.`,
       );
       return;
     }
 
     setCart((current) => {
       const existing = current.find(
-        (item) => item.id === product.id
+        (item) => item.id === product.id,
       );
 
       if (existing) {
@@ -207,7 +225,7 @@ export function Billing() {
           product.currentStock
         ) {
           setError(
-            `Only ${product.currentStock} units of ${product.name} are available.`
+            `Only ${product.currentStock} units of ${product.name} are available.`,
           );
 
           return current;
@@ -221,7 +239,7 @@ export function Billing() {
                 availableStock:
                   product.currentStock,
               }
-            : item
+            : item,
         );
       }
 
@@ -244,14 +262,16 @@ export function Billing() {
   };
 
   /*
-   * Barcode scanner support.
+   * ---------------------------------------------------------
+   * BARCODE / SKU SEARCH
    *
-   * Most USB barcode scanners behave like
-   * a keyboard and type the barcode followed
-   * by Enter.
+   * USB barcode scanners normally behave like keyboards.
+   * They type the barcode and press Enter.
+   * ---------------------------------------------------------
    */
+
   const handleSearchKeyDown = async (
-    event: React.KeyboardEvent<HTMLInputElement>
+    event: KeyboardEvent<HTMLInputElement>,
   ) => {
     if (event.key !== "Enter") {
       return;
@@ -270,10 +290,10 @@ export function Billing() {
       await supabase
         .from("products")
         .select(
-          "id,name,sku,barcode,category,selling_price,gst_rate,current_stock"
+          "id,name,sku,barcode,category,selling_price,gst_rate,current_stock",
         )
         .or(
-          `barcode.eq.${value},sku.eq.${value}`
+          `barcode.eq.${value},sku.eq.${value}`,
         )
         .eq("is_active", true)
         .maybeSingle();
@@ -283,7 +303,7 @@ export function Billing() {
     if (lookupError) {
       console.error(
         "Barcode lookup error:",
-        lookupError
+        lookupError,
       );
 
       setError(lookupError.message);
@@ -292,20 +312,25 @@ export function Billing() {
 
     if (!data) {
       setError(
-        `No product found for "${value}".`
+        `No product found for "${value}".`,
       );
       return;
     }
 
-    addToCart(mapProduct(data as ProductRow));
+    addToCart(
+      mapProduct(data as ProductRow),
+    );
   };
 
   /*
-   * Quantity changes.
+   * ---------------------------------------------------------
+   * QUANTITY
+   * ---------------------------------------------------------
    */
+
   const updateQuantity = (
     id: string,
-    change: number
+    change: number,
   ) => {
     setCart((current) =>
       current
@@ -326,7 +351,7 @@ export function Billing() {
             item.availableStock
           ) {
             setError(
-              `Only ${item.availableStock} units of ${item.name} are available.`
+              `Only ${item.availableStock} units of ${item.name} are available.`,
             );
 
             return item;
@@ -339,14 +364,16 @@ export function Billing() {
         })
         .filter(
           (item): item is CartItem =>
-            item !== null
-        )
+            item !== null,
+        ),
     );
   };
 
   const removeItem = (id: string) => {
     setCart((current) =>
-      current.filter((item) => item.id !== id)
+      current.filter(
+        (item) => item.id !== id,
+      ),
     );
   };
 
@@ -358,12 +385,15 @@ export function Billing() {
   };
 
   /*
-   * Open payment.
+   * ---------------------------------------------------------
+   * PAYMENT
+   * ---------------------------------------------------------
    */
+
   const openPayment = () => {
     if (cart.length === 0) {
       setError(
-        "Add at least one product before payment."
+        "Add at least one product before payment.",
       );
       return;
     }
@@ -373,189 +403,231 @@ export function Billing() {
   };
 
   /*
-   * Complete payment and reduce stock.
+   * ---------------------------------------------------------
+   * COMPLETE PAYMENT
+   * ---------------------------------------------------------
    */
+
   const completePayment = async () => {
-  if (cart.length === 0) {
-    return;
-  }
-
-  setProcessing(true);
-  setError("");
-  setSuccess("");
-
-  try {
-    /*
-     * 1. Verify stock before completing payment.
-     */
-    for (const item of cart) {
-      const { data, error: stockError } = await supabase
-        .from("products")
-        .select("id,name,current_stock")
-        .eq("id", item.id)
-        .eq("is_active", true)
-        .single();
-
-      if (stockError || !data) {
-        throw new Error(
-          `Could not verify stock for ${item.name}.`
-        );
-      }
-
-      const currentStock = Number(data.current_stock);
-
-      if (currentStock < item.quantity) {
-        throw new Error(
-          `${item.name} has only ${currentStock} units left.`
-        );
-      }
+    if (cart.length === 0) {
+      return;
     }
 
-    /*
-     * 2. Generate an Orderly bill number.
-     */
-    const now = new Date();
+    setProcessing(true);
+    setError("");
+    setSuccess("");
 
-    const datePart = [
-      now.getFullYear(),
-      String(now.getMonth() + 1).padStart(2, "0"),
-      String(now.getDate()).padStart(2, "0"),
-    ].join("");
+    try {
+      /*
+       * 1. Verify stock
+       */
 
-    const timePart = [
-      String(now.getHours()).padStart(2, "0"),
-      String(now.getMinutes()).padStart(2, "0"),
-      String(now.getSeconds()).padStart(2, "0"),
-    ].join("");
+      for (const item of cart) {
+        const {
+          data,
+          error: stockError,
+        } = await supabase
+          .from("products")
+          .select(
+            "id,name,current_stock",
+          )
+          .eq("id", item.id)
+          .eq("is_active", true)
+          .single();
 
-    const randomPart = Math.floor(
-      1000 + Math.random() * 9000
-    );
+        if (stockError || !data) {
+          throw new Error(
+            `Could not verify stock for ${item.name}.`,
+          );
+        }
 
-    const billNumber =
-      `ORD-${datePart}-${timePart}-${randomPart}`;
+        const currentStock = Number(
+          data.current_stock,
+        );
 
-    /*
-     * 3. Create the sale.
-     */
-    const { data: sale, error: saleError } =
-      await supabase
+        if (currentStock < item.quantity) {
+          throw new Error(
+            `${item.name} has only ${currentStock} units left.`,
+          );
+        }
+      }
+
+      /*
+       * 2. Generate Orderly bill number
+       */
+
+      const now = new Date();
+
+      const datePart = [
+        now.getFullYear(),
+        String(
+          now.getMonth() + 1,
+        ).padStart(2, "0"),
+        String(now.getDate()).padStart(
+          2,
+          "0",
+        ),
+      ].join("");
+
+      const timePart = [
+        String(
+          now.getHours(),
+        ).padStart(2, "0"),
+        String(
+          now.getMinutes(),
+        ).padStart(2, "0"),
+        String(
+          now.getSeconds(),
+        ).padStart(2, "0"),
+      ].join("");
+
+      const randomPart = Math.floor(
+        1000 + Math.random() * 9000,
+      );
+
+      const billNumber =
+        `ORD-${datePart}-${timePart}-${randomPart}`;
+
+      /*
+       * 3. Create sale
+       */
+
+      const {
+        data: sale,
+        error: saleError,
+      } = await supabase
         .from("sales")
         .insert({
           bill_number: billNumber,
-          subtotal: Number(subtotal.toFixed(2)),
-          gst_amount: Number(gst.toFixed(2)),
+          subtotal: Number(
+            subtotal.toFixed(2),
+          ),
+          gst_amount: Number(
+            gst.toFixed(2),
+          ),
           discount_amount: Number(
-            discountAmount.toFixed(2)
+            discountAmount.toFixed(2),
           ),
           total_amount: Number(
-            grandTotal.toFixed(2)
+            grandTotal.toFixed(2),
           ),
           payment_method: paymentMethod,
         })
         .select("id,bill_number")
         .single();
 
-    if (saleError || !sale) {
-      console.error(
-        "Sale creation error:",
-        saleError
-      );
+      if (saleError || !sale) {
+        console.error(
+          "Sale creation error:",
+          saleError,
+        );
 
-      throw new Error(
-        saleError?.message ||
-          "Could not create the sale."
-      );
-    }
+        throw new Error(
+          saleError?.message ||
+            "Could not create the sale.",
+        );
+      }
 
-    /*
-     * 4. Create sale items.
-     */
-    const saleItems = cart.map((item) => {
-      const lineSubtotal =
-        item.price * item.quantity;
+      /*
+       * 4. Create sale items
+       */
 
-      const lineGst =
-        (lineSubtotal * item.gstRate) / 100;
+      const saleItems = cart.map((item) => {
+        const lineSubtotal =
+          item.price * item.quantity;
 
-      return {
-        sale_id: sale.id,
-        product_id: item.id,
-        product_name: item.name,
-        sku: item.sku,
-        barcode: item.barcode,
-        quantity: item.quantity,
-        unit_price: Number(
-          item.price.toFixed(2)
-        ),
-        gst_rate: Number(
-          item.gstRate.toFixed(2)
-        ),
-        gst_amount: Number(
-          lineGst.toFixed(2)
-        ),
-        line_total: Number(
-          (lineSubtotal + lineGst).toFixed(2)
-        ),
-      };
-    });
+        const lineGst =
+          (lineSubtotal * item.gstRate) /
+          100;
 
-    const { error: itemsError } =
-      await supabase
+        return {
+          sale_id: sale.id,
+          product_id: item.id,
+          product_name: item.name,
+          sku: item.sku,
+          barcode: item.barcode,
+          quantity: item.quantity,
+          unit_price: Number(
+            item.price.toFixed(2),
+          ),
+          gst_rate: Number(
+            item.gstRate.toFixed(2),
+          ),
+          gst_amount: Number(
+            lineGst.toFixed(2),
+          ),
+          line_total: Number(
+            (
+              lineSubtotal + lineGst
+            ).toFixed(2),
+          ),
+        };
+      });
+
+      const {
+        error: itemsError,
+      } = await supabase
         .from("sale_items")
         .insert(saleItems);
 
-    if (itemsError) {
-      console.error(
-        "Sale items creation error:",
-        itemsError
-      );
+      if (itemsError) {
+        console.error(
+          "Sale items creation error:",
+          itemsError,
+        );
+
+        /*
+         * Remove incomplete sale
+         */
+
+        await supabase
+          .from("sales")
+          .delete()
+          .eq("id", sale.id);
+
+        throw new Error(
+          itemsError.message ||
+            "Could not save sale items.",
+        );
+      }
 
       /*
-       * Remove the sale if its items could not
-       * be created, so we don't leave an
-       * incomplete transaction.
+       * 5. Reduce inventory
        */
-      await supabase
-        .from("sales")
-        .delete()
-        .eq("id", sale.id);
 
-      throw new Error(
-        itemsError.message ||
-          "Could not save sale items."
-      );
-    }
-
-    /*
-     * 5. Reduce inventory stock.
-     */
-    for (const item of cart) {
-      const { data: currentProduct, error: readError } =
-        await supabase
+      for (const item of cart) {
+        const {
+          data: currentProduct,
+          error: readError,
+        } = await supabase
           .from("products")
           .select("current_stock")
           .eq("id", item.id)
           .single();
 
-      if (readError || !currentProduct) {
-        throw new Error(
-          `Could not update stock for ${item.name}.`
-        );
-      }
+        if (
+          readError ||
+          !currentProduct
+        ) {
+          throw new Error(
+            `Could not update stock for ${item.name}.`,
+          );
+        }
 
-      const newStock =
-        Number(currentProduct.current_stock) -
-        item.quantity;
+        const newStock =
+          Number(
+            currentProduct.current_stock,
+          ) - item.quantity;
 
-      if (newStock < 0) {
-        throw new Error(
-          `Insufficient stock for ${item.name}.`
-        );
-      }
+        if (newStock < 0) {
+          throw new Error(
+            `Insufficient stock for ${item.name}.`,
+          );
+        }
 
-      const { error: updateError } =
-        await supabase
+        const {
+          error: updateError,
+        } = await supabase
           .from("products")
           .update({
             current_stock: newStock,
@@ -564,57 +636,71 @@ export function Billing() {
           })
           .eq("id", item.id);
 
-      if (updateError) {
-        throw new Error(
-          `Could not update stock for ${item.name}.`
-        );
+        if (updateError) {
+          throw new Error(
+            `Could not update stock for ${item.name}.`,
+          );
+        }
       }
+
+      /*
+       * 6. Payment successful
+       */
+
+      setShowPayment(false);
+      setCart([]);
+      setDiscount("0");
+
+      setSuccess(
+        `Orderly bill ${sale.bill_number} created successfully. Total ₹${grandTotal.toFixed(
+          2,
+        )} via ${paymentMethod.toUpperCase()}.`,
+      );
+
+      /*
+       * Refresh inventory
+       */
+
+      await loadProducts();
+
+      setTimeout(() => {
+        setSuccess("");
+      }, 6000);
+    } catch (unknownError) {
+      console.error(
+        "Payment processing error:",
+        unknownError,
+      );
+
+      setError(
+        unknownError instanceof Error
+          ? unknownError.message
+          : "Payment could not be completed.",
+      );
+    } finally {
+      setProcessing(false);
     }
+  };
 
-    /*
-     * 6. Payment completed successfully.
-     */
-    setShowPayment(false);
-    setCart([]);
-    setDiscount("0");
+  /*
+   * ---------------------------------------------------------
+   * UI
+   * ---------------------------------------------------------
+   */
 
-    setSuccess(
-      `Orderly bill ${sale.bill_number} created successfully. Total ₹${grandTotal.toFixed(
-        2
-      )} via ${paymentMethod.toUpperCase()}.`
-    );
-
-    /*
-     * Refresh products so inventory shown
-     * on Billing is immediately updated.
-     */
-    await loadProducts();
-
-    setTimeout(() => {
-      setSuccess("");
-    }, 6000);
-  } catch (unknownError) {
-    console.error(
-      "Payment processing error:",
-      unknownError
-    );
-
-    setError(
-      unknownError instanceof Error
-        ? unknownError.message
-        : "Payment could not be completed."
-    );
-  } finally {
-    setProcessing(false);
-  }
-};
+  return (
     <section className="billing-page">
       <div className="page-heading">
         <div>
+          <span className="section-kicker">
+            RETAIL OPERATIONS
+          </span>
+
           <h2>Billing</h2>
+
           <p>
-            Create a new bill and process the
-            payment.
+            Create a new bill and process
+            the payment.
           </p>
         </div>
 
@@ -636,9 +722,13 @@ export function Billing() {
           style={{
             marginBottom: "20px",
             padding: "14px 18px",
-            border: "1px solid #b8d8c0",
+            border:
+              "1px solid #b8d8c0",
             background: "#f1faf3",
             color: "#246b36",
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
           }}
         >
           <Check size={18} />
@@ -657,9 +747,13 @@ export function Billing() {
                 type="text"
                 value={search}
                 onChange={(event) =>
-                  setSearch(event.target.value)
+                  setSearch(
+                    event.target.value,
+                  )
                 }
-                onKeyDown={handleSearchKeyDown}
+                onKeyDown={
+                  handleSearchKeyDown
+                }
                 placeholder="Search product by name, SKU or barcode..."
                 autoComplete="off"
               />
@@ -667,7 +761,9 @@ export function Billing() {
               {search && (
                 <button
                   className="clear-search"
-                  onClick={() => setSearch("")}
+                  onClick={() =>
+                    setSearch("")
+                  }
                   type="button"
                 >
                   Clear
@@ -693,44 +789,58 @@ export function Billing() {
             {loading ? (
               <div className="empty-products">
                 <div className="empty-icon">
-                  <ShoppingCart size={28} />
+                  <ShoppingCart
+                    size={28}
+                  />
                 </div>
 
-                <h3>Loading products...</h3>
+                <h3>
+                  Loading products...
+                </h3>
 
                 <p>
-                  Connecting to your inventory.
+                  Connecting to your
+                  inventory.
                 </p>
               </div>
             ) : products.length === 0 ? (
               <div className="empty-products">
                 <div className="empty-icon">
-                  <ShoppingCart size={28} />
+                  <ShoppingCart
+                    size={28}
+                  />
                 </div>
 
-                <h3>No products available</h3>
+                <h3>
+                  No products available
+                </h3>
 
                 <p>
-                  Add products from Inventory before
+                  Add products from
+                  Inventory before
                   creating a bill.
                 </p>
 
                 <span>
-                  Products added to Inventory will
-                  appear here automatically.
+                  Products added to
+                  Inventory will appear
+                  here automatically.
                 </span>
               </div>
-            ) : filteredProducts.length === 0 ? (
+            ) : filteredProducts.length ===
+              0 ? (
               <div className="empty-products">
                 <div className="empty-icon">
                   <Search size={28} />
                 </div>
 
-                <h3>No matching products</h3>
+                <h3>
+                  No matching products
+                </h3>
 
                 <p>
-                  Try the product name, SKU or
-                  barcode.
+                  Try the product name,
+                  SKU or barcode.
                 </p>
               </div>
             ) : (
@@ -740,23 +850,30 @@ export function Billing() {
                     const cartItem =
                       cart.find(
                         (item) =>
-                          item.id === product.id
+                          item.id ===
+                          product.id,
                       );
 
                     const inCart =
-                      cartItem?.quantity || 0;
+                      cartItem?.quantity ||
+                      0;
 
                     const outOfStock =
-                      product.currentStock <= 0;
+                      product.currentStock <=
+                      0;
 
                     return (
                       <button
                         key={product.id}
                         type="button"
                         className="billing-product-card"
-                        disabled={outOfStock}
+                        disabled={
+                          outOfStock
+                        }
                         onClick={() =>
-                          addToCart(product)
+                          addToCart(
+                            product,
+                          )
                         }
                       >
                         <div>
@@ -769,11 +886,13 @@ export function Billing() {
                           </span>
 
                           <small>
-                            SKU: {product.sku}
+                            SKU:{" "}
+                            {product.sku}
                           </small>
 
                           <small>
-                            EAN: {product.barcode}
+                            EAN:{" "}
+                            {product.barcode}
                           </small>
                         </div>
 
@@ -781,13 +900,15 @@ export function Billing() {
                           <strong>
                             ₹
                             {product.sellingPrice.toFixed(
-                              2
+                              2,
                             )}
                           </strong>
 
                           <span>
                             Stock:{" "}
-                            {product.currentStock}
+                            {
+                              product.currentStock
+                            }
                           </span>
 
                           {inCart > 0 && (
@@ -795,10 +916,16 @@ export function Billing() {
                               {inCart} in cart
                             </b>
                           )}
+
+                          {outOfStock && (
+                            <b>
+                              Out of stock
+                            </b>
+                          )}
                         </div>
                       </button>
                     );
-                  }
+                  },
                 )}
               </div>
             )}
@@ -808,7 +935,9 @@ export function Billing() {
         <aside className="bill-panel">
           <div className="bill-panel-header">
             <div>
-              <h3>Current Bill</h3>
+              <h3>
+                Current Bill
+              </h3>
 
               <p>
                 {totalItems === 0
@@ -824,7 +953,9 @@ export function Billing() {
             <button
               className="clear-cart"
               type="button"
-              disabled={cart.length === 0}
+              disabled={
+                cart.length === 0
+              }
               onClick={clearCart}
             >
               Clear
@@ -834,15 +965,18 @@ export function Billing() {
           <div className="cart-items">
             {cart.length === 0 ? (
               <div className="empty-cart">
-                <ShoppingCart size={34} />
+                <ShoppingCart
+                  size={34}
+                />
 
                 <strong>
                   Your cart is empty
                 </strong>
 
                 <span>
-                  Select a product or scan its
-                  barcode to add it.
+                  Select a product or
+                  scan its barcode to
+                  add it.
                 </span>
               </div>
             ) : (
@@ -861,7 +995,10 @@ export function Billing() {
                     </span>
 
                     <b>
-                      ₹{item.price.toFixed(2)}
+                      ₹
+                      {item.price.toFixed(
+                        2,
+                      )}
                     </b>
 
                     <small>
@@ -876,11 +1013,13 @@ export function Billing() {
                         onClick={() =>
                           updateQuantity(
                             item.id,
-                            -1
+                            -1,
                           )
                         }
                       >
-                        <Minus size={14} />
+                        <Minus
+                          size={14}
+                        />
                       </button>
 
                       <span>
@@ -892,11 +1031,13 @@ export function Billing() {
                         onClick={() =>
                           updateQuantity(
                             item.id,
-                            1
+                            1,
                           )
                         }
                       >
-                        <Plus size={14} />
+                        <Plus
+                          size={14}
+                        />
                       </button>
                     </div>
 
@@ -904,10 +1045,14 @@ export function Billing() {
                       className="remove-item"
                       type="button"
                       onClick={() =>
-                        removeItem(item.id)
+                        removeItem(
+                          item.id,
+                        )
                       }
                     >
-                      <Trash2 size={16} />
+                      <Trash2
+                        size={16}
+                      />
                     </button>
                   </div>
                 </div>
@@ -918,6 +1063,7 @@ export function Billing() {
           <div className="bill-summary">
             <div>
               <span>Items</span>
+
               <strong>
                 {totalItems}
               </strong>
@@ -925,15 +1071,19 @@ export function Billing() {
 
             <div>
               <span>Subtotal</span>
+
               <strong>
-                ₹{subtotal.toFixed(2)}
+                ₹
+                {subtotal.toFixed(2)}
               </strong>
             </div>
 
             <div>
               <span>GST</span>
+
               <strong>
-                ₹{gst.toFixed(2)}
+                ₹
+                {gst.toFixed(2)}
               </strong>
             </div>
 
@@ -947,10 +1097,12 @@ export function Billing() {
                 value={discount}
                 onChange={(event) =>
                   setDiscount(
-                    event.target.value
+                    event.target.value,
                   )
                 }
-                disabled={cart.length === 0}
+                disabled={
+                  cart.length === 0
+                }
                 style={{
                   width: "100px",
                   textAlign: "right",
@@ -962,7 +1114,10 @@ export function Billing() {
               <span>Total</span>
 
               <strong>
-                ₹{grandTotal.toFixed(2)}
+                ₹
+                {grandTotal.toFixed(
+                  2,
+                )}
               </strong>
             </div>
           </div>
@@ -992,7 +1147,9 @@ export function Billing() {
               event.currentTarget
             ) {
               if (!processing) {
-                setShowPayment(false);
+                setShowPayment(
+                  false,
+                );
               }
             }
           }}
@@ -1016,9 +1173,13 @@ export function Billing() {
               <button
                 className="modal-close"
                 type="button"
-                disabled={processing}
+                disabled={
+                  processing
+                }
                 onClick={() =>
-                  setShowPayment(false)
+                  setShowPayment(
+                    false,
+                  )
                 }
               >
                 <X size={19} />
@@ -1027,24 +1188,31 @@ export function Billing() {
 
             <div
               style={{
-                padding: "28px 24px",
+                padding:
+                  "28px 24px",
               }}
             >
               <div
                 style={{
-                  textAlign: "center",
-                  marginBottom: "28px",
+                  textAlign:
+                    "center",
+                  marginBottom:
+                    "28px",
                 }}
               >
                 <span
                   style={{
-                    display: "block",
-                    fontSize: "13px",
-                    letterSpacing: "2px",
+                    display:
+                      "block",
+                    fontSize:
+                      "13px",
+                    letterSpacing:
+                      "2px",
                     textTransform:
                       "uppercase",
                     color: "#777",
-                    marginBottom: "8px",
+                    marginBottom:
+                      "8px",
                   }}
                 >
                   Amount Payable
@@ -1052,18 +1220,23 @@ export function Billing() {
 
                 <strong
                   style={{
-                    fontSize: "38px",
+                    fontSize:
+                      "38px",
                     fontFamily:
                       "Georgia, serif",
                   }}
                 >
-                  ₹{grandTotal.toFixed(2)}
+                  ₹
+                  {grandTotal.toFixed(
+                    2,
+                  )}
                 </strong>
               </div>
 
               <div
                 style={{
-                  display: "grid",
+                  display:
+                    "grid",
                   gridTemplateColumns:
                     "repeat(3, 1fr)",
                   gap: "10px",
@@ -1072,11 +1245,16 @@ export function Billing() {
                 <button
                   type="button"
                   onClick={() =>
-                    setPaymentMethod("cash")
+                    setPaymentMethod(
+                      "cash",
+                    )
                   }
-                  disabled={processing}
+                  disabled={
+                    processing
+                  }
                   style={{
-                    padding: "18px 10px",
+                    padding:
+                      "18px 10px",
                     border:
                       paymentMethod ===
                       "cash"
@@ -1087,20 +1265,28 @@ export function Billing() {
                       "cash"
                         ? "#f5f5f5"
                         : "#fff",
-                    cursor: "pointer",
+                    cursor:
+                      "pointer",
                   }}
                 >
-                  <strong>Cash</strong>
+                  <strong>
+                    Cash
+                  </strong>
                 </button>
 
                 <button
                   type="button"
                   onClick={() =>
-                    setPaymentMethod("upi")
+                    setPaymentMethod(
+                      "upi",
+                    )
                   }
-                  disabled={processing}
+                  disabled={
+                    processing
+                  }
                   style={{
-                    padding: "18px 10px",
+                    padding:
+                      "18px 10px",
                     border:
                       paymentMethod ===
                       "upi"
@@ -1111,20 +1297,28 @@ export function Billing() {
                       "upi"
                         ? "#f5f5f5"
                         : "#fff",
-                    cursor: "pointer",
+                    cursor:
+                      "pointer",
                   }}
                 >
-                  <strong>UPI</strong>
+                  <strong>
+                    UPI
+                  </strong>
                 </button>
 
                 <button
                   type="button"
                   onClick={() =>
-                    setPaymentMethod("card")
+                    setPaymentMethod(
+                      "card",
+                    )
                   }
-                  disabled={processing}
+                  disabled={
+                    processing
+                  }
                   style={{
-                    padding: "18px 10px",
+                    padding:
+                      "18px 10px",
                     border:
                       paymentMethod ===
                       "card"
@@ -1135,14 +1329,24 @@ export function Billing() {
                       "card"
                         ? "#f5f5f5"
                         : "#fff",
-                    cursor: "pointer",
+                    cursor:
+                      "pointer",
+                    display:
+                      "flex",
+                    alignItems:
+                      "center",
+                    justifyContent:
+                      "center",
+                    gap: "7px",
                   }}
                 >
                   <CreditCard
                     size={18}
                   />
 
-                  <strong>Card</strong>
+                  <strong>
+                    Card
+                  </strong>
                 </button>
               </div>
             </div>
@@ -1151,9 +1355,13 @@ export function Billing() {
               <button
                 className="secondary-button"
                 type="button"
-                disabled={processing}
+                disabled={
+                  processing
+                }
                 onClick={() =>
-                  setShowPayment(false)
+                  setShowPayment(
+                    false,
+                  )
                 }
               >
                 Cancel
@@ -1162,15 +1370,19 @@ export function Billing() {
               <button
                 className="primary-button"
                 type="button"
-                disabled={processing}
-                onClick={completePayment}
+                disabled={
+                  processing
+                }
+                onClick={
+                  completePayment
+                }
               >
                 <Check size={17} />
 
                 {processing
                   ? "Processing..."
                   : `Pay ₹${grandTotal.toFixed(
-                      2
+                      2,
                     )}`}
               </button>
             </div>
