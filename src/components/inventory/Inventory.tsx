@@ -63,10 +63,10 @@ function mapProduct(row: ProductRow): Product {
   };
 }
 
-function calculateEAN13CheckDigit(first12: string) {
+function calculateEAN13CheckDigit(first12: string): number {
   let sum = 0;
 
-  for (let i = 0; i < first12.length; i++) {
+  for (let i = 0; i < 12; i++) {
     const digit = Number(first12[i]);
 
     sum += i % 2 === 0 ? digit : digit * 3;
@@ -75,7 +75,7 @@ function calculateEAN13CheckDigit(first12: string) {
   return (10 - (sum % 10)) % 10;
 }
 
-function generateEAN13() {
+function generateEAN13(): string {
   const first12 =
     "890" +
     Math.floor(100000000 + Math.random() * 900000000)
@@ -87,34 +87,41 @@ function generateEAN13() {
   return `${first12}${checkDigit}`;
 }
 
-function generateSKU() {
+function generateSKU(): string {
+  const timestamp = Date.now().toString().slice(-8);
   const random = Math.floor(1000 + Math.random() * 9000);
 
-  return `PRD-${Date.now().toString().slice(-6)}-${random}`;
+  return `PRD-${timestamp}-${random}`;
 }
 
 export function Inventory() {
   const [search, setSearch] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
+
   const [showAddProduct, setShowAddProduct] = useState(false);
+
   const [form, setForm] = useState<ProductForm>(emptyForm);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
   const [error, setError] = useState("");
 
   const filteredProducts = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    if (!query) return products;
+    if (!query) {
+      return products;
+    }
 
-    return products.filter(
-      (product) =>
+    return products.filter((product) => {
+      return (
         product.name.toLowerCase().includes(query) ||
         product.sku.toLowerCase().includes(query) ||
         product.barcode.includes(query) ||
-        product.category.toLowerCase().includes(query),
-    );
+        product.category.toLowerCase().includes(query)
+      );
+    });
   }, [products, search]);
 
   const loadProducts = async () => {
@@ -124,18 +131,24 @@ export function Inventory() {
     const { data, error: fetchError } = await supabase
       .from("products")
       .select(
-        "id,name,sku,barcode,category,purchase_price,selling_price,gst_rate,current_stock,min_stock_level",
+        "id,name,sku,barcode,category,purchase_price,selling_price,gst_rate,current_stock,min_stock_level"
       )
       .eq("is_active", true)
-      .order("created_at", { ascending: false });
+      .order("created_at", {
+        ascending: false,
+      });
 
     if (fetchError) {
+      console.error("Inventory load error:", fetchError);
       setError(fetchError.message);
       setLoading(false);
       return;
     }
 
-    setProducts((data as ProductRow[]).map(mapProduct));
+    setProducts(
+      ((data || []) as ProductRow[]).map(mapProduct)
+    );
+
     setLoading(false);
   };
 
@@ -143,9 +156,25 @@ export function Inventory() {
     loadProducts();
   }, []);
 
+  const openAddProduct = () => {
+    setError("");
+    setForm(emptyForm);
+    setShowAddProduct(true);
+  };
+
+  const closeAddProduct = () => {
+    if (saving) {
+      return;
+    }
+
+    setShowAddProduct(false);
+    setError("");
+    setForm(emptyForm);
+  };
+
   const updateForm = (
     field: keyof ProductForm,
-    value: string,
+    value: string
   ) => {
     setForm((current) => ({
       ...current,
@@ -158,6 +187,7 @@ export function Inventory() {
 
     const name = form.name.trim();
     const category = form.category.trim();
+
     const purchasePrice = Number(form.purchasePrice);
     const sellingPrice = Number(form.sellingPrice);
     const gstRate = Number(form.gstRate);
@@ -174,78 +204,164 @@ export function Inventory() {
       return;
     }
 
-    if (!Number.isFinite(purchasePrice) || purchasePrice < 0) {
+    if (
+      !Number.isFinite(purchasePrice) ||
+      purchasePrice < 0
+    ) {
       setError("Please enter a valid purchase price.");
       return;
     }
 
-    if (!Number.isFinite(sellingPrice) || sellingPrice < 0) {
+    if (
+      !Number.isFinite(sellingPrice) ||
+      sellingPrice < 0
+    ) {
       setError("Please enter a valid selling price.");
       return;
     }
 
-    if (!Number.isFinite(gstRate) || gstRate < 0 || gstRate > 100) {
+    if (
+      !Number.isFinite(gstRate) ||
+      gstRate < 0 ||
+      gstRate > 100
+    ) {
       setError("Please enter a valid GST rate.");
       return;
     }
 
-    if (!Number.isInteger(openingStock) || openingStock < 0) {
+    if (
+      !Number.isInteger(openingStock) ||
+      openingStock < 0
+    ) {
       setError("Please enter a valid opening stock.");
       return;
     }
 
-    if (!Number.isInteger(minStockLevel) || minStockLevel < 0) {
+    if (
+      !Number.isInteger(minStockLevel) ||
+      minStockLevel < 0
+    ) {
       setError("Please enter a valid minimum stock level.");
+      return;
+    }
+
+    if (sellingPrice < purchasePrice) {
+      setError(
+        "Selling price cannot be lower than purchase price."
+      );
       return;
     }
 
     setSaving(true);
 
-    const sku = generateSKU();
-    const barcode = generateEAN13();
+    try {
+      let sku = generateSKU();
+      let barcode = generateEAN13();
 
-    const { data, error: insertError } = await supabase
-      .from("products")
-      .insert({
-        name,
-        sku,
-        barcode,
-        category,
-        purchase_price: purchasePrice,
-        selling_price: sellingPrice,
-        gst_rate: gstRate,
-        current_stock: openingStock,
-        min_stock_level: minStockLevel,
-        is_active: true,
-      })
-      .select(
-        "id,name,sku,barcode,category,purchase_price,selling_price,gst_rate,current_stock,min_stock_level",
-      )
-      .single();
+      /*
+       * Make sure the automatically generated SKU and
+       * barcode do not already exist.
+       */
+      let attempts = 0;
 
-    if (insertError) {
-      setError(insertError.message);
+      while (attempts < 10) {
+        const { data: existingSku } = await supabase
+          .from("products")
+          .select("id")
+          .eq("sku", sku)
+          .maybeSingle();
+
+        const { data: existingBarcode } = await supabase
+          .from("products")
+          .select("id")
+          .eq("barcode", barcode)
+          .maybeSingle();
+
+        if (!existingSku && !existingBarcode) {
+          break;
+        }
+
+        sku = generateSKU();
+        barcode = generateEAN13();
+
+        attempts++;
+      }
+
+      if (attempts >= 10) {
+        setError(
+          "Could not generate a unique SKU and barcode. Please try again."
+        );
+        setSaving(false);
+        return;
+      }
+
+      const { data, error: insertError } = await supabase
+        .from("products")
+        .insert({
+          name,
+          sku,
+          barcode,
+          category,
+          purchase_price: purchasePrice,
+          selling_price: sellingPrice,
+          gst_rate: gstRate,
+          current_stock: openingStock,
+          min_stock_level: minStockLevel,
+          is_active: true,
+        })
+        .select(
+          "id,name,sku,barcode,category,purchase_price,selling_price,gst_rate,current_stock,min_stock_level"
+        )
+        .single();
+
+      if (insertError) {
+        console.error("Product insert error:", insertError);
+
+        setError(insertError.message);
+        setSaving(false);
+        return;
+      }
+
+      const newProduct = mapProduct(
+        data as ProductRow
+      );
+
+      setProducts((current) => [
+        newProduct,
+        ...current,
+      ]);
+
+      setForm(emptyForm);
+      setShowAddProduct(false);
       setSaving(false);
-      return;
+    } catch (unknownError) {
+      console.error(unknownError);
+
+      setError(
+        unknownError instanceof Error
+          ? unknownError.message
+          : "Something went wrong while saving the product."
+      );
+
+      setSaving(false);
     }
-
-    setProducts((current) => [mapProduct(data as ProductRow), ...current]);
-
-    setForm(emptyForm);
-    setShowAddProduct(false);
-    setSaving(false);
   };
 
   return (
     <section className="inventory-page">
+
+      {/* TOOLBAR */}
       <div className="inventory-toolbar">
+
         <div className="search-input-wrapper">
           <Search size={18} />
 
           <input
             type="text"
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) =>
+              setSearch(event.target.value)
+            }
             placeholder="Search product, SKU or barcode..."
           />
         </div>
@@ -256,83 +372,79 @@ export function Inventory() {
         </div>
 
         <button
-  type="button"
-  onClick={() => setShowAddProduct(true)}
-  style={{
-    background: "#111",
-    color: "#fff",
-    border: "none",
-    padding: "14px 24px",
-    cursor: "pointer",
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "8px",
-    position: "relative",
-    zIndex: 100,
-  }}
->
-  <Plus size={18} />
-  Add Product
-</button>
+          className="primary-button"
+          type="button"
+          onClick={openAddProduct}
+        >
           <Plus size={18} />
           Add Product
         </button>
+
       </div>
 
+      {/* ERROR */}
       {error && !showAddProduct && (
-        <div className="error-message">{error}</div>
+        <div className="error-message">
+          {error}
+        </div>
       )}
 
+      {/* INVENTORY CARD */}
       <div className="inventory-card">
+
         {loading ? (
+
           <div className="empty-inventory">
+
             <div className="empty-icon">
               <Package size={30} />
             </div>
 
-            <h3>Loading inventory</h3>
-
-            <p>Connecting to your product database.</p>
-          </div>
-        ) : filteredProducts.length === 0 ? (
-          <div className="empty-inventory">
-            <div className="empty-icon">
-              <Package size={30} />
-            </div>
-
-            <h3>Your inventory is empty</h3>
+            <h3>
+              Loading inventory
+            </h3>
 
             <p>
-              Add your first product. Its SKU and EAN-13 barcode
-              will be generated automatically.
+              Connecting to your product database.
+            </p>
+
+          </div>
+
+        ) : filteredProducts.length === 0 ? (
+
+          <div className="empty-inventory">
+
+            <div className="empty-icon">
+              <Package size={30} />
+            </div>
+
+            <h3>
+              Your inventory is empty
+            </h3>
+
+            <p>
+              Add your first product. Its SKU and
+              EAN-13 barcode will be generated
+              automatically.
             </p>
 
             <button
-  type="button"
-  onClick={() => setShowAddProduct(true)}
-  style={{
-    background: "#111",
-    color: "#fff",
-    border: "none",
-    padding: "14px 24px",
-    cursor: "pointer",
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "8px",
-    position: "relative",
-    zIndex: 100,
-  }}
->
-  <Plus size={18} />
-  Add Your First Product
-</button>
+              className="primary-button"
+              type="button"
+              onClick={openAddProduct}
+            >
               <Plus size={18} />
               Add Your First Product
             </button>
+
           </div>
+
         ) : (
+
           <div className="inventory-table-wrapper">
+
             <table className="inventory-table">
+
               <thead>
                 <tr>
                   <th>Product</th>
@@ -347,17 +459,28 @@ export function Inventory() {
               </thead>
 
               <tbody>
+
                 {filteredProducts.map((product) => (
+
                   <tr key={product.id}>
+
                     <td>
-                      <strong>{product.name}</strong>
+                      <strong>
+                        {product.name}
+                      </strong>
                     </td>
 
-                    <td>{product.sku}</td>
+                    <td>
+                      {product.sku}
+                    </td>
 
-                    <td>{product.barcode}</td>
+                    <td>
+                      {product.barcode}
+                    </td>
 
-                    <td>{product.category}</td>
+                    <td>
+                      {product.category}
+                    </td>
 
                     <td>
                       ₹{product.purchasePrice.toFixed(2)}
@@ -367,12 +490,15 @@ export function Inventory() {
                       ₹{product.sellingPrice.toFixed(2)}
                     </td>
 
-                    <td>{product.gstRate}%</td>
+                    <td>
+                      {product.gstRate}%
+                    </td>
 
                     <td>
                       <span
                         className={
-                          product.currentStock <= product.minStockLevel
+                          product.currentStock <=
+                          product.minStockLevel
                             ? "stock-low"
                             : "stock-ok"
                         }
@@ -380,94 +506,142 @@ export function Inventory() {
                         {product.currentStock}
                       </span>
                     </td>
+
                   </tr>
+
                 ))}
+
               </tbody>
+
             </table>
+
           </div>
+
         )}
+
       </div>
 
+      {/* ADD PRODUCT MODAL */}
       {showAddProduct && (
+
         <div
           className="modal-backdrop"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !saving) {
-              setShowAddProduct(false);
+
+            if (
+              event.target === event.currentTarget &&
+              !saving
+            ) {
+              closeAddProduct();
             }
+
           }}
         >
+
           <div
             className="product-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="add-product-title"
           >
+
+            {/* MODAL HEADER */}
             <div className="modal-header">
+
               <div>
+
                 <span className="section-kicker">
                   INVENTORY
                 </span>
 
-                <h2 id="add-product-title">Add Product</h2>
+                <h2 id="add-product-title">
+                  Add Product
+                </h2>
+
               </div>
 
               <button
                 className="modal-close"
                 type="button"
                 disabled={saving}
-                onClick={() => setShowAddProduct(false)}
+                onClick={closeAddProduct}
                 aria-label="Close"
               >
                 <X size={19} />
               </button>
+
             </div>
 
+            {/* MODAL ERROR */}
             {error && (
+
               <div className="error-message modal-error">
                 {error}
               </div>
+
             )}
 
+            {/* FORM */}
             <div className="product-form">
+
+              {/* PRODUCT INFORMATION */}
               <div className="form-section">
+
                 <span className="form-section-title">
                   PRODUCT INFORMATION
                 </span>
 
                 <label>
                   Product name
+
                   <input
+                    type="text"
                     value={form.name}
                     onChange={(event) =>
-                      updateForm("name", event.target.value)
+                      updateForm(
+                        "name",
+                        event.target.value
+                      )
                     }
                     placeholder="e.g. Herbal Shampoo"
                     disabled={saving}
+                    autoFocus
                   />
+
                 </label>
 
                 <label>
                   Category
+
                   <input
+                    type="text"
                     value={form.category}
                     onChange={(event) =>
-                      updateForm("category", event.target.value)
+                      updateForm(
+                        "category",
+                        event.target.value
+                      )
                     }
                     placeholder="e.g. Hair Care"
                     disabled={saving}
                   />
+
                 </label>
+
               </div>
 
+              {/* PRICING & STOCK */}
               <div className="form-section">
+
                 <span className="form-section-title">
                   PRICING & STOCK
                 </span>
 
                 <div className="form-grid">
+
                   <label>
                     Purchase price
+
                     <input
                       type="number"
                       min="0"
@@ -476,16 +650,18 @@ export function Inventory() {
                       onChange={(event) =>
                         updateForm(
                           "purchasePrice",
-                          event.target.value,
+                          event.target.value
                         )
                       }
                       placeholder="0.00"
                       disabled={saving}
                     />
+
                   </label>
 
                   <label>
                     Selling price
+
                     <input
                       type="number"
                       min="0"
@@ -494,36 +670,55 @@ export function Inventory() {
                       onChange={(event) =>
                         updateForm(
                           "sellingPrice",
-                          event.target.value,
+                          event.target.value
                         )
                       }
                       placeholder="0.00"
                       disabled={saving}
                     />
+
                   </label>
 
                   <label>
                     GST %
+
                     <select
                       value={form.gstRate}
                       onChange={(event) =>
                         updateForm(
                           "gstRate",
-                          event.target.value,
+                          event.target.value
                         )
                       }
                       disabled={saving}
                     >
-                      <option value="0">0%</option>
-                      <option value="5">5%</option>
-                      <option value="12">12%</option>
-                      <option value="18">18%</option>
-                      <option value="28">28%</option>
+                      <option value="0">
+                        0%
+                      </option>
+
+                      <option value="5">
+                        5%
+                      </option>
+
+                      <option value="12">
+                        12%
+                      </option>
+
+                      <option value="18">
+                        18%
+                      </option>
+
+                      <option value="28">
+                        28%
+                      </option>
+
                     </select>
+
                   </label>
 
                   <label>
                     Opening stock
+
                     <input
                       type="number"
                       min="0"
@@ -532,16 +727,18 @@ export function Inventory() {
                       onChange={(event) =>
                         updateForm(
                           "openingStock",
-                          event.target.value,
+                          event.target.value
                         )
                       }
                       placeholder="0"
                       disabled={saving}
                     />
+
                   </label>
 
                   <label>
                     Minimum stock
+
                     <input
                       type="number"
                       min="0"
@@ -550,40 +747,52 @@ export function Inventory() {
                       onChange={(event) =>
                         updateForm(
                           "minStockLevel",
-                          event.target.value,
+                          event.target.value
                         )
                       }
                       placeholder="0"
                       disabled={saving}
                     />
+
                   </label>
+
                 </div>
+
               </div>
 
+              {/* BARCODE NOTICE */}
               <div className="barcode-notice">
+
                 <div className="barcode-notice-mark">
                   EAN
                 </div>
 
                 <div>
+
                   <strong>
                     Barcode generated automatically
                   </strong>
 
                   <span>
-                    A unique 13-digit EAN-13-compatible barcode
-                    will be created when this product is saved.
+                    A unique 13-digit EAN-13 barcode
+                    will be created when this product
+                    is saved.
                   </span>
+
                 </div>
+
               </div>
+
             </div>
 
+            {/* FOOTER */}
             <div className="modal-footer">
+
               <button
                 className="secondary-button"
                 type="button"
                 disabled={saving}
-                onClick={() => setShowAddProduct(false)}
+                onClick={closeAddProduct}
               >
                 Cancel
               </button>
@@ -594,12 +803,19 @@ export function Inventory() {
                 disabled={saving}
                 onClick={addProduct}
               >
-                {saving ? "Saving..." : "Save Product"}
+                {saving
+                  ? "Saving..."
+                  : "Save Product"}
               </button>
+
             </div>
+
           </div>
+
         </div>
+
       )}
+
     </section>
   );
 }
