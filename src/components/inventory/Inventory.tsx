@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Package, Plus, Search, X } from "lucide-react";
+import { supabase } from "../../lib/supabase";
 
 type Product = {
   id: string;
@@ -12,6 +13,19 @@ type Product = {
   gstRate: number;
   currentStock: number;
   minStockLevel: number;
+};
+
+type ProductRow = {
+  id: string;
+  name: string;
+  sku: string;
+  barcode: string;
+  category: string;
+  purchase_price: number;
+  selling_price: number;
+  gst_rate: number;
+  current_stock: number;
+  min_stock_level: number;
 };
 
 type ProductForm = {
@@ -34,36 +48,49 @@ const emptyForm: ProductForm = {
   minStockLevel: "",
 };
 
-function generateEAN13(existingBarcodes: string[]) {
-  let barcode = "";
-
-  do {
-    const prefix = "890";
-    const randomPart = Math.floor(
-      100000000 + Math.random() * 900000000,
-    ).toString();
-
-    const first12 = `${prefix}${randomPart}`.slice(0, 12);
-
-    let sum = 0;
-
-    for (let i = 0; i < first12.length; i++) {
-      const digit = Number(first12[i]);
-      sum += i % 2 === 0 ? digit : digit * 3;
-    }
-
-    const checkDigit = (10 - (sum % 10)) % 10;
-
-    barcode = `${first12}${checkDigit}`;
-  } while (existingBarcodes.includes(barcode));
-
-  return barcode;
+function mapProduct(row: ProductRow): Product {
+  return {
+    id: row.id,
+    name: row.name,
+    sku: row.sku,
+    barcode: row.barcode,
+    category: row.category,
+    purchasePrice: Number(row.purchase_price),
+    sellingPrice: Number(row.selling_price),
+    gstRate: Number(row.gst_rate),
+    currentStock: Number(row.current_stock),
+    minStockLevel: Number(row.min_stock_level),
+  };
 }
 
-function generateSKU(existingProducts: Product[]) {
-  const nextNumber = existingProducts.length + 1;
+function calculateEAN13CheckDigit(first12: string) {
+  let sum = 0;
 
-  return `PRD-${nextNumber.toString().padStart(4, "0")}`;
+  for (let i = 0; i < first12.length; i++) {
+    const digit = Number(first12[i]);
+
+    sum += i % 2 === 0 ? digit : digit * 3;
+  }
+
+  return (10 - (sum % 10)) % 10;
+}
+
+function generateEAN13() {
+  const first12 =
+    "890" +
+    Math.floor(100000000 + Math.random() * 900000000)
+      .toString()
+      .slice(0, 9);
+
+  const checkDigit = calculateEAN13CheckDigit(first12);
+
+  return `${first12}${checkDigit}`;
+}
+
+function generateSKU() {
+  const random = Math.floor(1000 + Math.random() * 9000);
+
+  return `PRD-${Date.now().toString().slice(-6)}-${random}`;
 }
 
 export function Inventory() {
@@ -71,6 +98,10 @@ export function Inventory() {
   const [products, setProducts] = useState<Product[]>([]);
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [form, setForm] = useState<ProductForm>(emptyForm);
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   const filteredProducts = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -86,6 +117,32 @@ export function Inventory() {
     );
   }, [products, search]);
 
+  const loadProducts = async () => {
+    setLoading(true);
+    setError("");
+
+    const { data, error: fetchError } = await supabase
+      .from("products")
+      .select(
+        "id,name,sku,barcode,category,purchase_price,selling_price,gst_rate,current_stock,min_stock_level",
+      )
+      .eq("is_active", true)
+      .order("created_at", { ascending: false });
+
+    if (fetchError) {
+      setError(fetchError.message);
+      setLoading(false);
+      return;
+    }
+
+    setProducts((data as ProductRow[]).map(mapProduct));
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    loadProducts();
+  }, []);
+
   const updateForm = (
     field: keyof ProductForm,
     value: string,
@@ -96,7 +153,9 @@ export function Inventory() {
     }));
   };
 
-  const addProduct = () => {
+  const addProduct = async () => {
+    setError("");
+
     const name = form.name.trim();
     const category = form.category.trim();
     const purchasePrice = Number(form.purchasePrice);
@@ -106,78 +165,75 @@ export function Inventory() {
     const minStockLevel = Number(form.minStockLevel);
 
     if (!name) {
-      alert("Please enter a product name.");
+      setError("Please enter a product name.");
       return;
     }
 
     if (!category) {
-      alert("Please enter a category.");
+      setError("Please enter a category.");
       return;
     }
 
-    if (
-      !Number.isFinite(purchasePrice) ||
-      purchasePrice < 0
-    ) {
-      alert("Please enter a valid purchase price.");
+    if (!Number.isFinite(purchasePrice) || purchasePrice < 0) {
+      setError("Please enter a valid purchase price.");
       return;
     }
 
-    if (
-      !Number.isFinite(sellingPrice) ||
-      sellingPrice < 0
-    ) {
-      alert("Please enter a valid selling price.");
+    if (!Number.isFinite(sellingPrice) || sellingPrice < 0) {
+      setError("Please enter a valid selling price.");
       return;
     }
 
-    if (
-      !Number.isFinite(gstRate) ||
-      gstRate < 0 ||
-      gstRate > 100
-    ) {
-      alert("Please enter a valid GST rate.");
+    if (!Number.isFinite(gstRate) || gstRate < 0 || gstRate > 100) {
+      setError("Please enter a valid GST rate.");
       return;
     }
 
-    if (
-      !Number.isInteger(openingStock) ||
-      openingStock < 0
-    ) {
-      alert("Please enter a valid opening stock.");
+    if (!Number.isInteger(openingStock) || openingStock < 0) {
+      setError("Please enter a valid opening stock.");
       return;
     }
 
-    if (
-      !Number.isInteger(minStockLevel) ||
-      minStockLevel < 0
-    ) {
-      alert("Please enter a valid minimum stock level.");
+    if (!Number.isInteger(minStockLevel) || minStockLevel < 0) {
+      setError("Please enter a valid minimum stock level.");
       return;
     }
 
-    const barcode = generateEAN13(
-      products.map((product) => product.barcode),
-    );
+    setSaving(true);
 
-    const sku = generateSKU(products);
+    const sku = generateSKU();
+    const barcode = generateEAN13();
 
-    const newProduct: Product = {
-      id: crypto.randomUUID(),
-      name,
-      sku,
-      barcode,
-      category,
-      purchasePrice,
-      sellingPrice,
-      gstRate,
-      currentStock: openingStock,
-      minStockLevel,
-    };
+    const { data, error: insertError } = await supabase
+      .from("products")
+      .insert({
+        name,
+        sku,
+        barcode,
+        category,
+        purchase_price: purchasePrice,
+        selling_price: sellingPrice,
+        gst_rate: gstRate,
+        current_stock: openingStock,
+        min_stock_level: minStockLevel,
+        is_active: true,
+      })
+      .select(
+        "id,name,sku,barcode,category,purchase_price,selling_price,gst_rate,current_stock,min_stock_level",
+      )
+      .single();
 
-    setProducts((current) => [...current, newProduct]);
+    if (insertError) {
+      setError(insertError.message);
+      setSaving(false);
+      return;
+    }
+
+    setProducts((current) => [mapProduct(data as ProductRow), ...current]);
+
     setForm(emptyForm);
     setShowAddProduct(false);
+    setSaving(false);
   };
 
   return (
@@ -202,15 +258,32 @@ export function Inventory() {
         <button
           className="primary-button"
           type="button"
-          onClick={() => setShowAddProduct(true)}
+          onClick={() => {
+            setError("");
+            setShowAddProduct(true);
+          }}
         >
           <Plus size={18} />
           Add Product
         </button>
       </div>
 
+      {error && !showAddProduct && (
+        <div className="error-message">{error}</div>
+      )}
+
       <div className="inventory-card">
-        {filteredProducts.length === 0 ? (
+        {loading ? (
+          <div className="empty-inventory">
+            <div className="empty-icon">
+              <Package size={30} />
+            </div>
+
+            <h3>Loading inventory</h3>
+
+            <p>Connecting to your product database.</p>
+          </div>
+        ) : filteredProducts.length === 0 ? (
           <div className="empty-inventory">
             <div className="empty-icon">
               <Package size={30} />
@@ -226,7 +299,10 @@ export function Inventory() {
             <button
               className="primary-button"
               type="button"
-              onClick={() => setShowAddProduct(true)}
+              onClick={() => {
+                setError("");
+                setShowAddProduct(true);
+              }}
             >
               <Plus size={18} />
               Add Your First Product
@@ -274,8 +350,7 @@ export function Inventory() {
                     <td>
                       <span
                         className={
-                          product.currentStock <=
-                          product.minStockLevel
+                          product.currentStock <= product.minStockLevel
                             ? "stock-low"
                             : "stock-ok"
                         }
@@ -295,7 +370,7 @@ export function Inventory() {
         <div
           className="modal-backdrop"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
+            if (event.target === event.currentTarget && !saving) {
               setShowAddProduct(false);
             }
           }}
@@ -312,20 +387,25 @@ export function Inventory() {
                   INVENTORY
                 </span>
 
-                <h2 id="add-product-title">
-                  Add Product
-                </h2>
+                <h2 id="add-product-title">Add Product</h2>
               </div>
 
               <button
                 className="modal-close"
                 type="button"
+                disabled={saving}
                 onClick={() => setShowAddProduct(false)}
                 aria-label="Close"
               >
                 <X size={19} />
               </button>
             </div>
+
+            {error && (
+              <div className="error-message modal-error">
+                {error}
+              </div>
+            )}
 
             <div className="product-form">
               <div className="form-section">
@@ -341,6 +421,7 @@ export function Inventory() {
                       updateForm("name", event.target.value)
                     }
                     placeholder="e.g. Herbal Shampoo"
+                    disabled={saving}
                   />
                 </label>
 
@@ -349,19 +430,17 @@ export function Inventory() {
                   <input
                     value={form.category}
                     onChange={(event) =>
-                      updateForm(
-                        "category",
-                        event.target.value,
-                      )
+                      updateForm("category", event.target.value)
                     }
                     placeholder="e.g. Hair Care"
+                    disabled={saving}
                   />
                 </label>
               </div>
 
               <div className="form-section">
                 <span className="form-section-title">
-                  PRICING
+                  PRICING & STOCK
                 </span>
 
                 <div className="form-grid">
@@ -379,6 +458,7 @@ export function Inventory() {
                         )
                       }
                       placeholder="0.00"
+                      disabled={saving}
                     />
                   </label>
 
@@ -396,6 +476,7 @@ export function Inventory() {
                         )
                       }
                       placeholder="0.00"
+                      disabled={saving}
                     />
                   </label>
 
@@ -409,6 +490,7 @@ export function Inventory() {
                           event.target.value,
                         )
                       }
+                      disabled={saving}
                     >
                       <option value="0">0%</option>
                       <option value="5">5%</option>
@@ -432,6 +514,7 @@ export function Inventory() {
                         )
                       }
                       placeholder="0"
+                      disabled={saving}
                     />
                   </label>
 
@@ -449,6 +532,7 @@ export function Inventory() {
                         )
                       }
                       placeholder="0"
+                      disabled={saving}
                     />
                   </label>
                 </div>
@@ -465,9 +549,8 @@ export function Inventory() {
                   </strong>
 
                   <span>
-                    A unique 13-digit EAN-13-compatible
-                    barcode will be created when you save
-                    this product.
+                    A unique 13-digit EAN-13-compatible barcode
+                    will be created when this product is saved.
                   </span>
                 </div>
               </div>
@@ -477,6 +560,7 @@ export function Inventory() {
               <button
                 className="secondary-button"
                 type="button"
+                disabled={saving}
                 onClick={() => setShowAddProduct(false)}
               >
                 Cancel
@@ -485,9 +569,10 @@ export function Inventory() {
               <button
                 className="primary-button"
                 type="button"
+                disabled={saving}
                 onClick={addProduct}
               >
-                Save Product
+                {saving ? "Saving..." : "Save Product"}
               </button>
             </div>
           </div>
