@@ -1,5 +1,151 @@
-import { PackagePlus, Search } from 'lucide-react';
+import { useMemo, useState } from "react";
+import { Package, Plus, Search, Trash2 } from "lucide-react";
+
+type Product = {
+  id: string;
+  name: string;
+  sku: string;
+  barcode: string;
+  category: string;
+  purchasePrice: number;
+  sellingPrice: number;
+  gstRate: number;
+  currentStock: number;
+  minStockLevel: number;
+};
 
 export function Inventory() {
-  return <section className="p-4"><div className="rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-lg font-semibold text-slate-900">Inventory</h2><p className="text-sm text-slate-500">Products, stock and pricing</p></div><button className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white"><PackagePlus className="size-4" />Add product</button></div><div className="p-4"><div className="relative max-w-md"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><input className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-4 outline-none focus:border-slate-400" placeholder="Search products" /></div><div className="mt-8 flex min-h-[360px] items-center justify-center text-sm text-slate-400">Your real inventory will be connected here.</div></div></div></section>;
+  const [search, setSearch] = useState("");
+  const [products, setProducts] = useState<Product[]>([]);
+
+  const filteredProducts = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    if (!query) return products;
+
+    return products.filter(
+      (product) =>
+        product.name.toLowerCase().includes(query) ||
+        product.sku.toLowerCase().includes(query) ||
+        product.barcode.toLowerCase().includes(query) ||
+        product.category.toLowerCase().includes(query),
+    );
+  }, [products, search]);
+
+  const deleteProduct = (id: string) => {
+    setProducts((current) =>
+      current.filter((product) => product.id !== id),
+    );
+  };
+
+  return (
+    <section className="inventory-page">
+      <div className="page-heading">
+        <div>
+          <h2>Inventory</h2>
+          <p>Manage products, prices and stock levels.</p>
+        </div>
+
+        <button className="primary-button" type="button">
+          <Plus size={18} />
+          Add Product
+        </button>
+      </div>
+
+      <div className="inventory-toolbar">
+        <div className="search-input-wrapper">
+          <Search size={18} />
+
+          <input
+            type="text"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search product, SKU, barcode or category..."
+          />
+        </div>
+
+        <div className="inventory-count">
+          {filteredProducts.length} product
+          {filteredProducts.length === 1 ? "" : "s"}
+        </div>
+      </div>
+
+      <div className="inventory-card">
+        {filteredProducts.length === 0 ? (
+          <div className="empty-inventory">
+            <div className="empty-icon">
+              <Package size={30} />
+            </div>
+
+            <h3>No products yet</h3>
+
+            <p>
+              Your inventory is empty. Add your first product to start
+              billing.
+            </p>
+
+            <button className="primary-button" type="button">
+              <Plus size={18} />
+              Add Your First Product
+            </button>
+          </div>
+        ) : (
+          <div className="inventory-table-wrapper">
+            <table className="inventory-table">
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>SKU</th>
+                  <th>Barcode</th>
+                  <th>Category</th>
+                  <th>Purchase</th>
+                  <th>Selling</th>
+                  <th>GST</th>
+                  <th>Stock</th>
+                  <th />
+                </tr>
+              </thead>
+
+              <tbody>
+                {filteredProducts.map((product) => (
+                  <tr key={product.id}>
+                    <td>
+                      <strong>{product.name}</strong>
+                    </td>
+                    <td>{product.sku}</td>
+                    <td>{product.barcode}</td>
+                    <td>{product.category}</td>
+                    <td>₹{product.purchasePrice.toFixed(2)}</td>
+                    <td>₹{product.sellingPrice.toFixed(2)}</td>
+                    <td>{product.gstRate}%</td>
+                    <td>
+                      <span
+                        className={
+                          product.currentStock <= product.minStockLevel
+                            ? "stock-low"
+                            : "stock-ok"
+                        }
+                      >
+                        {product.currentStock}
+                      </span>
+                    </td>
+                    <td>
+                      <button
+                        className="icon-button danger"
+                        type="button"
+                        onClick={() => deleteProduct(product.id)}
+                        aria-label={`Delete ${product.name}`}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </section>
+  );
 }
