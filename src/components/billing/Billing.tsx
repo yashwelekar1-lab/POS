@@ -18,6 +18,11 @@ import {
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 
+import {
+  Html5Qrcode,
+  Html5QrcodeSupportedFormats,
+} from "html5-qrcode";
+
 type Product = {
   id: string;
   name: string;
@@ -85,6 +90,11 @@ export function Billing() {
     useState<PaymentMethod>("cash");
 
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const barcodeScannerRef = useRef<Html5Qrcode | null>(null);
+
+const [scannerOpen, setScannerOpen] = useState(false);
+const [scannerStarting, setScannerStarting] = useState(false);
+const [scannerError, setScannerError] = useState("");
 
   /*
    * ---------------------------------------------------------
@@ -123,7 +133,15 @@ export function Billing() {
   useEffect(() => {
     loadProducts();
   }, []);
+useEffect(() => {
+  return () => {
+    const scanner = barcodeScannerRef.current;
 
+    if (scanner) {
+      scanner.stop().catch(() => {});
+    }
+  };
+}, []);
   /*
    * ---------------------------------------------------------
    * SEARCH
@@ -322,6 +340,143 @@ export function Billing() {
     );
   };
 
+  /*
+ * ---------------------------------------------------------
+ * CAMERA BARCODE SCANNER
+ * ---------------------------------------------------------
+ */
+
+const stopBarcodeScanner = async () => {
+  const scanner = barcodeScannerRef.current;
+
+  if (!scanner) {
+    setScannerOpen(false);
+    setScannerStarting(false);
+    return;
+  }
+
+  try {
+    await scanner.stop();
+  } catch (error) {
+    console.warn("Barcode scanner stop warning:", error);
+  }
+
+  try {
+    await scanner.clear();
+  } catch (error) {
+    console.warn("Barcode scanner clear warning:", error);
+  }
+
+  barcodeScannerRef.current = null;
+  setScannerOpen(false);
+  setScannerStarting(false);
+};
+
+const findProductByBarcode = async (barcode: string) => {
+  const cleanBarcode = barcode.trim();
+
+  if (!cleanBarcode) {
+    return;
+  }
+
+  setError("");
+  setScannerError("");
+
+  const { data, error: lookupError } = await supabase
+    .from("products")
+    .select(
+      "id,name,sku,barcode,category,selling_price,gst_rate,current_stock",
+    )
+    .eq("barcode", cleanBarcode)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (lookupError) {
+    console.error("Camera barcode lookup error:", lookupError);
+
+    setScannerError(
+      lookupError.message || "Unable to find the product.",
+    );
+
+    return;
+  }
+
+  if (!data) {
+    setScannerError(
+      `No product found for barcode "${cleanBarcode}".`,
+    );
+
+    return;
+  }
+
+  addToCart(mapProduct(data as ProductRow));
+};
+
+const startBarcodeScanner = async () => {
+  if (barcodeScannerRef.current || scannerStarting) {
+    return;
+  }
+
+  setScannerStarting(true);
+  setScannerError("");
+
+  const scanner = new Html5Qrcode("orderly-camera-scanner", {
+    formatsToSupport: [
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.UPC_A,
+      Html5QrcodeSupportedFormats.UPC_E,
+      Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.CODE_39,
+    ],
+  });
+
+  barcodeScannerRef.current = scanner;
+
+  try {
+    await scanner.start(
+      {
+        facingMode: "environment",
+      },
+      {
+        fps: 10,
+        qrbox: {
+          width: 300,
+          height: 150,
+        },
+        aspectRatio: 1.777778,
+      },
+      async (decodedText) => {
+        console.log("Orderly barcode scanned:", decodedText);
+
+        await stopBarcodeScanner();
+
+        await findProductByBarcode(decodedText);
+      },
+      () => {
+        // Barcode not detected in this frame.
+      },
+    );
+
+    setScannerStarting(false);
+  } catch (error) {
+    console.error("Camera scanner error:", error);
+
+    barcodeScannerRef.current = null;
+    setScannerStarting(false);
+
+    setScannerError(
+      "Camera could not be started. Please allow camera access and try again.",
+    );
+  }
+};
+
+const openBarcodeScanner = () => {
+  setError("");
+  setScannerError("");
+  setScannerOpen(true);
+};
+  
   /*
    * ---------------------------------------------------------
    * QUANTITY
@@ -592,18 +747,14 @@ export function Billing() {
               )}
             </div>
 
-            <button
-              className="scan-button"
-              type="button"
-              onClick={() => {
-                searchInputRef.current?.focus();
-                setSearch("");
-                setError("");
-              }}
-            >
-              <Barcode size={19} />
-              Scan
-            </button>
+           <button
+  className="scan-button"
+  type="button"
+  onClick={openBarcodeScanner}
+>
+  <Barcode size={19} />
+  Scan
+</button>
           </div>
 
           <div className="product-area">
@@ -958,7 +1109,105 @@ export function Billing() {
           </button>
         </aside>
       </div>
+      
+{scannerOpen && (
+  <div
+    className="barcode-scanner-backdrop"
+    onMouseDown={(event) => {
+      if (event.target === event.currentTarget) {
+        stopBarcodeScanner();
+      }
+    }}
+  >
+    <div
+      className="barcode-scanner-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Scan barcode"
+    >
+      <div className="barcode-scanner-header">
+        <div>
+          <span className="section-kicker">
+            ORDERLY SCANNER
+          </span>
 
+          <h2>Scan Barcode</h2>
+
+          <p>
+            Point your camera at the product barcode.
+          </p>
+        </div>
+
+        <button
+          className="modal-close"
+          type="button"
+          onClick={stopBarcodeScanner}
+        >
+          <X size={19} />
+        </button>
+      </div>
+
+      <div className="barcode-scanner-content">
+        <div
+          id="orderly-camera-scanner"
+          className="barcode-camera-container"
+        />
+
+        {scannerStarting && (
+          <div className="barcode-scanner-status">
+            Starting camera...
+          </div>
+        )}
+
+        {!scannerStarting && !scannerError && (
+          <div className="barcode-scanner-help">
+            <Barcode size={20} />
+
+            <div>
+              <strong>
+                Align the barcode inside the frame
+              </strong>
+
+              <span>
+                Keep the barcode steady until Orderly detects it.
+              </span>
+            </div>
+          </div>
+        )}
+
+        {scannerError && (
+          <div className="barcode-scanner-error">
+            <strong>Scanner error</strong>
+            <span>{scannerError}</span>
+          </div>
+        )}
+      </div>
+
+      <div className="barcode-scanner-footer">
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={stopBarcodeScanner}
+        >
+          Cancel
+        </button>
+
+        {scannerError && (
+          <button
+            className="primary-button"
+            type="button"
+            onClick={() => {
+              setScannerError("");
+              setTimeout(startBarcodeScanner, 100);
+            }}
+          >
+            Try Again
+          </button>
+        )}
+      </div>
+    </div>
+  </div>
+)}
       {showPayment && (
         <div
           className="modal-backdrop"
