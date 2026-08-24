@@ -376,118 +376,238 @@ export function Billing() {
    * Complete payment and reduce stock.
    */
   const completePayment = async () => {
-    if (cart.length === 0) {
-      return;
-    }
+  if (cart.length === 0) {
+    return;
+  }
 
-    setProcessing(true);
-    setError("");
-    setSuccess("");
+  setProcessing(true);
+  setError("");
+  setSuccess("");
 
-    try {
-      /*
-       * Re-check stock directly from Supabase
-       * before completing the bill.
-       */
-      for (const item of cart) {
-        const { data, error: stockError } =
-          await supabase
-            .from("products")
-            .select(
-              "id,name,current_stock"
-            )
-            .eq("id", item.id)
-            .eq("is_active", true)
-            .single();
+  try {
+    /*
+     * 1. Verify stock before completing payment.
+     */
+    for (const item of cart) {
+      const { data, error: stockError } = await supabase
+        .from("products")
+        .select("id,name,current_stock")
+        .eq("id", item.id)
+        .eq("is_active", true)
+        .single();
 
-        if (stockError) {
-          throw new Error(
-            `Could not verify stock for ${item.name}.`
-          );
-        }
-
-        const currentStock = Number(
-          data.current_stock
+      if (stockError || !data) {
+        throw new Error(
+          `Could not verify stock for ${item.name}.`
         );
-
-        if (
-          currentStock < item.quantity
-        ) {
-          throw new Error(
-            `${item.name} has only ${currentStock} units left.`
-          );
-        }
       }
+
+      const currentStock = Number(data.current_stock);
+
+      if (currentStock < item.quantity) {
+        throw new Error(
+          `${item.name} has only ${currentStock} units left.`
+        );
+      }
+    }
+
+    /*
+     * 2. Generate an Orderly bill number.
+     */
+    const now = new Date();
+
+    const datePart = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, "0"),
+      String(now.getDate()).padStart(2, "0"),
+    ].join("");
+
+    const timePart = [
+      String(now.getHours()).padStart(2, "0"),
+      String(now.getMinutes()).padStart(2, "0"),
+      String(now.getSeconds()).padStart(2, "0"),
+    ].join("");
+
+    const randomPart = Math.floor(
+      1000 + Math.random() * 9000
+    );
+
+    const billNumber =
+      `ORD-${datePart}-${timePart}-${randomPart}`;
+
+    /*
+     * 3. Create the sale.
+     */
+    const { data: sale, error: saleError } =
+      await supabase
+        .from("sales")
+        .insert({
+          bill_number: billNumber,
+          subtotal: Number(subtotal.toFixed(2)),
+          gst_amount: Number(gst.toFixed(2)),
+          discount_amount: Number(
+            discountAmount.toFixed(2)
+          ),
+          total_amount: Number(
+            grandTotal.toFixed(2)
+          ),
+          payment_method: paymentMethod,
+        })
+        .select("id,bill_number")
+        .single();
+
+    if (saleError || !sale) {
+      console.error(
+        "Sale creation error:",
+        saleError
+      );
+
+      throw new Error(
+        saleError?.message ||
+          "Could not create the sale."
+      );
+    }
+
+    /*
+     * 4. Create sale items.
+     */
+    const saleItems = cart.map((item) => {
+      const lineSubtotal =
+        item.price * item.quantity;
+
+      const lineGst =
+        (lineSubtotal * item.gstRate) / 100;
+
+      return {
+        sale_id: sale.id,
+        product_id: item.id,
+        product_name: item.name,
+        sku: item.sku,
+        barcode: item.barcode,
+        quantity: item.quantity,
+        unit_price: Number(
+          item.price.toFixed(2)
+        ),
+        gst_rate: Number(
+          item.gstRate.toFixed(2)
+        ),
+        gst_amount: Number(
+          lineGst.toFixed(2)
+        ),
+        line_total: Number(
+          (lineSubtotal + lineGst).toFixed(2)
+        ),
+      };
+    });
+
+    const { error: itemsError } =
+      await supabase
+        .from("sale_items")
+        .insert(saleItems);
+
+    if (itemsError) {
+      console.error(
+        "Sale items creation error:",
+        itemsError
+      );
 
       /*
-       * Reduce stock.
+       * Remove the sale if its items could not
+       * be created, so we don't leave an
+       * incomplete transaction.
        */
-      for (const item of cart) {
-        const { data: currentProduct, error: readError } =
-          await supabase
-            .from("products")
-            .select("current_stock")
-            .eq("id", item.id)
-            .single();
+      await supabase
+        .from("sales")
+        .delete()
+        .eq("id", sale.id);
 
-        if (readError || !currentProduct) {
-          throw new Error(
-            `Could not update stock for ${item.name}.`
-          );
-        }
+      throw new Error(
+        itemsError.message ||
+          "Could not save sale items."
+      );
+    }
 
-        const newStock =
-          Number(currentProduct.current_stock) -
-          item.quantity;
+    /*
+     * 5. Reduce inventory stock.
+     */
+    for (const item of cart) {
+      const { data: currentProduct, error: readError } =
+        await supabase
+          .from("products")
+          .select("current_stock")
+          .eq("id", item.id)
+          .single();
 
-        const { error: updateError } =
-          await supabase
-            .from("products")
-            .update({
-              current_stock: newStock,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", item.id);
-
-        if (updateError) {
-          throw new Error(
-            `Could not update stock for ${item.name}.`
-          );
-        }
+      if (readError || !currentProduct) {
+        throw new Error(
+          `Could not update stock for ${item.name}.`
+        );
       }
 
-      setShowPayment(false);
-      setCart([]);
-      setDiscount("0");
+      const newStock =
+        Number(currentProduct.current_stock) -
+        item.quantity;
 
-      setSuccess(
-        `Payment successful. Bill total ₹${grandTotal.toFixed(
-          2
-        )} via ${paymentMethod.toUpperCase()}.`
-      );
+      if (newStock < 0) {
+        throw new Error(
+          `Insufficient stock for ${item.name}.`
+        );
+      }
 
-      await loadProducts();
+      const { error: updateError } =
+        await supabase
+          .from("products")
+          .update({
+            current_stock: newStock,
+            updated_at:
+              new Date().toISOString(),
+          })
+          .eq("id", item.id);
 
-      setTimeout(() => {
-        setSuccess("");
-      }, 5000);
-    } catch (unknownError) {
-      console.error(
-        "Payment processing error:",
-        unknownError
-      );
-
-      setError(
-        unknownError instanceof Error
-          ? unknownError.message
-          : "Payment could not be completed."
-      );
-    } finally {
-      setProcessing(false);
+      if (updateError) {
+        throw new Error(
+          `Could not update stock for ${item.name}.`
+        );
+      }
     }
-  };
 
-  return (
+    /*
+     * 6. Payment completed successfully.
+     */
+    setShowPayment(false);
+    setCart([]);
+    setDiscount("0");
+
+    setSuccess(
+      `Orderly bill ${sale.bill_number} created successfully. Total ₹${grandTotal.toFixed(
+        2
+      )} via ${paymentMethod.toUpperCase()}.`
+    );
+
+    /*
+     * Refresh products so inventory shown
+     * on Billing is immediately updated.
+     */
+    await loadProducts();
+
+    setTimeout(() => {
+      setSuccess("");
+    }, 6000);
+  } catch (unknownError) {
+    console.error(
+      "Payment processing error:",
+      unknownError
+    );
+
+    setError(
+      unknownError instanceof Error
+        ? unknownError.message
+        : "Payment could not be completed."
+    );
+  } finally {
+    setProcessing(false);
+  }
+};
     <section className="billing-page">
       <div className="page-heading">
         <div>
