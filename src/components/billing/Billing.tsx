@@ -475,6 +475,10 @@ const openBarcodeScanner = () => {
   setError("");
   setScannerError("");
   setScannerOpen(true);
+
+  setTimeout(() => {
+    startBarcodeScanner();
+  }, 150);
 };
   
   /*
