@@ -1,0 +1,5 @@
+import { PackagePlus, Search } from 'lucide-react';
+
+export function Inventory() {
+  return <section className="p-4"><div className="rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-lg font-semibold text-slate-900">Inventory</h2><p className="text-sm text-slate-500">Products, stock and pricing</p></div><button className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white"><PackagePlus className="size-4" />Add product</button></div><div className="p-4"><div className="relative max-w-md"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><input className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-4 outline-none focus:border-slate-400" placeholder="Search products" /></div><div className="mt-8 flex min-h-[360px] items-center justify-center text-sm text-slate-400">Your real inventory will be connected here.</div></div></div></section>;
+}
