@@ -848,9 +848,6 @@ const completePayment = async () => {
     setProcessing(false);
   }
 };
-        }
-      }
-    }
 
     /*
      * Send only product IDs + quantities.
