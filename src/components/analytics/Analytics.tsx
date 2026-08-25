@@ -1,4 +1,4 @@
-
+import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
   Boxes,
@@ -811,7 +811,7 @@ export function Analytics() {
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
