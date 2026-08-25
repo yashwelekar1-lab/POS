@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+
 import {
   BarChart3,
   Boxes,
@@ -808,7 +808,16 @@ export function Analytics() {
                           )}
                         </strong>
                       </div>
-           <style>{`
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
         .sale-clickable-row {
           cursor: pointer !important;
           transition: background-color .15s ease;
