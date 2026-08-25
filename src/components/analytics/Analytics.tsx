@@ -626,26 +626,20 @@ export function Analytics() {
 
       {selectedSale && (
         <div
-          className="sale-details-overlay"
+          className="invoice-preview-overlay"
           onClick={closeSaleDetails}
         >
           <div
-            className="sale-details-modal"
+            className="invoice-preview-modal"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="sale-details-header">
+            <div className="invoice-preview-toolbar">
               <div>
-                <span className="eyebrow">TRANSACTION DETAILS</span>
+                <span className="eyebrow">INVOICE PREVIEW</span>
                 <h2>{selectedSale.bill_number}</h2>
-                <p>
-                  {new Date(selectedSale.created_at).toLocaleString("en-IN", {
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                  })}
-                </p>
               </div>
 
-              <div className="sale-details-actions">
+              <div className="invoice-preview-actions">
                 <button
                   type="button"
                   className="invoice-download-button"
@@ -653,225 +647,239 @@ export function Analytics() {
                   disabled={downloadingInvoice || detailsLoading}
                 >
                   <Download size={16} />
-                  {downloadingInvoice ? "Creating Invoice..." : "Download Invoice"}
+                  {downloadingInvoice ? "Creating..." : "Download Invoice"}
                 </button>
 
                 <button
                   type="button"
                   className="sale-details-close"
                   onClick={closeSaleDetails}
-                  aria-label="Close"
+                  aria-label="Close invoice preview"
                 >
                   <X size={20} />
                 </button>
               </div>
             </div>
 
-            <div className="sale-details-body">
-              <div className="sale-info-grid">
-                <div className="sale-info-card">
-                  <div className="sale-info-icon"><User size={18} /></div>
-                  <div>
-                    <span>Customer</span>
-                    <strong>{selectedSale.customer_name || "Walk-in Customer"}</strong>
-                    <small>{selectedSale.customer_phone || "No phone number"}</small>
-                  </div>
+            <div className="invoice-preview-scroll">
+              {detailsLoading ? (
+                <div className="invoice-loading">
+                  <RefreshCw className="spin" size={24} />
+                  <strong>Preparing invoice...</strong>
+                  <span>Loading purchased products</span>
                 </div>
+              ) : (
+                <div className="invoice-paper">
+                  <div className="invoice-brand-row">
+                    <div>
+                      <div className="invoice-brand">ORDERLY</div>
+                      <div className="invoice-subtitle">
+                        RETAIL POINT OF SALE
+                      </div>
+                    </div>
 
-                <div className="sale-info-card">
-                  <div className="sale-info-icon"><CreditCard size={18} /></div>
-                  <div>
-                    <span>Payment Method</span>
-                    <strong>{selectedSale.payment_method?.toUpperCase() || "—"}</strong>
-                    <small>Completed payment</small>
+                    <div className="invoice-title-block">
+                      <div className="invoice-title">INVOICE</div>
+                      <div>
+                        <strong>{selectedSale.bill_number}</strong>
+                      </div>
+                      <div>
+                        {new Date(selectedSale.created_at).toLocaleString(
+                          "en-IN",
+                          {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          },
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
 
-                <div className="sale-info-card">
-                  <div className="sale-info-icon"><Receipt size={18} /></div>
-                  <div>
-                    <span>Bill Number</span>
-                    <strong>{selectedSale.bill_number}</strong>
-                    <small>{dateOnly(selectedSale.created_at)}</small>
+                  <div className="invoice-divider" />
+
+                  <div className="invoice-customer-grid">
+                    <div>
+                      <span className="invoice-label">BILL TO</span>
+                      <strong>
+                        {selectedSale.customer_name || "Walk-in Customer"}
+                      </strong>
+                      <span>
+                        {selectedSale.customer_phone || "No phone number"}
+                      </span>
+                    </div>
+
+                    <div className="invoice-payment-box">
+                      <span className="invoice-label">PAYMENT</span>
+                      <strong>
+                        {selectedSale.payment_method?.toUpperCase() || "—"}
+                      </strong>
+                      <span>Payment completed</span>
+                    </div>
                   </div>
-                </div>
 
-                <div className="sale-info-card">
-                  <div className="sale-info-icon"><IndianRupee size={18} /></div>
-                  <div>
-                    <span>Total Paid</span>
-                    <strong>{formatMoney(Number(selectedSale.total_amount || 0))}</strong>
-                    <small>Including GST</small>
+                  <div className="invoice-items">
+                    <div className="invoice-items-header">
+                      <span>PRODUCT</span>
+                      <span>QTY</span>
+                      <span>UNIT PRICE</span>
+                      <span>GST</span>
+                      <span>TOTAL</span>
+                    </div>
+
+                    {selectedSaleItems.length === 0 ? (
+                      <div className="invoice-no-items">
+                        No products found for this invoice.
+                      </div>
+                    ) : (
+                      selectedSaleItems.map((item) => (
+                        <div className="invoice-item-row" key={item.id}>
+                          <div>
+                            <strong>{item.product_name}</strong>
+                            <small>
+                              SKU: {item.sku || "—"} · Barcode:{" "}
+                              {item.barcode || "—"}
+                            </small>
+                          </div>
+                          <span>{item.quantity}</span>
+                          <span>
+                            {formatMoney(Number(item.unit_price || 0))}
+                          </span>
+                          <span>
+                            {Number(item.gst_rate || 0)}%
+                            <small>
+                              {formatMoney(Number(item.gst_amount || 0))}
+                            </small>
+                          </span>
+                          <strong>
+                            {formatMoney(Number(item.line_total || 0))}
+                          </strong>
+                        </div>
+                      ))
+                    )}
                   </div>
-                </div>
-              </div>
 
-              <div className="sale-products-section">
-                <div className="sale-products-heading">
-                  <div>
-                    <h3>Products Purchased</h3>
-                    <p>Complete product-level information for this bill.</p>
-                  </div>
-                  <span>
-                    {selectedSaleItems.reduce(
-                      (total, item) => total + Number(item.quantity || 0),
-                      0,
-                    )} items
-                  </span>
-                </div>
+                  <div className="invoice-bottom">
+                    <div className="invoice-thank-you">
+                      <FileText size={17} />
+                      <div>
+                        <strong>Thank you for shopping with Orderly.</strong>
+                        <span>
+                          This invoice records your completed transaction.
+                        </span>
+                      </div>
+                    </div>
 
-                {detailsLoading ? (
-                  <div className="analytics-empty">
-                    <RefreshCw className="spin" size={22} />
-                    <strong>Loading sale details...</strong>
-                  </div>
-                ) : selectedSaleItems.length === 0 ? (
-                  <div className="analytics-empty">
-                    <ShoppingBag size={28} />
-                    <strong>No items found</strong>
-                  </div>
-                ) : (
-                  <div className="sales-table-wrapper">
-                    <table className="sales-table sale-details-table">
-                      <thead>
-                        <tr>
-                          <th>Product</th>
-                          <th>SKU</th>
-                          <th>Barcode</th>
-                          <th>Qty</th>
-                          <th>Unit Price</th>
-                          <th>GST</th>
-                          <th>Line Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {selectedSaleItems.map((item) => (
-                          <tr key={item.id}>
-                            <td>
-                              <strong>{item.product_name}</strong>
-                              <small className="product-id">
-                                ID: {item.product_id}
-                              </small>
-                            </td>
-                            <td>{item.sku || "—"}</td>
-                            <td>{item.barcode || "—"}</td>
-                            <td>{item.quantity}</td>
-                            <td>{formatMoney(Number(item.unit_price || 0))}</td>
-                            <td>
-                              {Number(item.gst_rate || 0)}%
-                              <small className="gst-amount">
-                                {formatMoney(Number(item.gst_amount || 0))}
-                              </small>
-                            </td>
-                            <td>
-                              <strong>{formatMoney(Number(item.line_total || 0))}</strong>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-              <div className="sale-summary">
-                <div>
-                  <span>Subtotal</span>
-                  <strong>{formatMoney(Number(selectedSale.subtotal || 0))}</strong>
-                </div>
-                <div>
-                  <span>CGST</span>
-                  <strong>{formatMoney(Number(selectedSale.gst_amount || 0) / 2)}</strong>
-                </div>
-                <div>
-                  <span>SGST</span>
-                  <strong>{formatMoney(Number(selectedSale.gst_amount || 0) / 2)}</strong>
-                </div>
-                <div>
-                  <span>Discount</span>
-                  <strong>{formatMoney(Number(selectedSale.discount_amount || 0))}</strong>
-                </div>
-                <div className="sale-summary-total">
-                  <span>Total</span>
-                  <strong>{formatMoney(Number(selectedSale.total_amount || 0))}</strong>
-                </div>
-              </div>
-
-              <div className="invoice-hint">
-                <FileText size={16} />
-                Click <strong>Download Invoice</strong> to save this transaction as a PDF.
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <style>{`
+                    <div className="invoice-total-box">
+                      <div>
+                        <span>Subtotal</span>
+                        <strong>
+                          {formatMoney(Number(selectedSale.subtotal || 0))}
+                        </strong>
+                      </div>
+                      <div>
+                        <span>CGST</span>
+                        <strong>
+                          {formatMoney(
+                            Number(selectedSale.gst_amount || 0) / 2,
+                          )}
+                        </strong>
+                      </div>
+                      <div>
+                        <span>SGST</span>
+                        <strong>
+                          {formatMoney(
+                            Number(selectedSale.gst_amount || 0) / 2,
+                          )}
+                        </strong>
+                      </div>
+                      <div>
+                        <span>Discount</span>
+                        <strong>
+                          {formatMoney(
+                            Number(selectedSale.discount_amount || 0),
+                          )}
+                        </strong>
+                      </div>
+                      <div className="invoice-grand-total">
+                        <span>TOTAL</span>
+                        <strong>
+                          {formatMoney(
+                            Number(selectedSale.total_amount || 0),
+                          )}
+                        </strong>
+                      </div>
+           <style>{`
         .sale-clickable-row {
           cursor: pointer !important;
           transition: background-color .15s ease;
         }
+
         .sale-clickable-row:hover {
           background: #faf8f4 !important;
         }
-        .sale-details-overlay {
+
+        .invoice-preview-overlay {
           position: fixed;
           inset: 0;
           z-index: 99999;
-          background: rgba(0,0,0,.58);
+          background: rgba(0, 0, 0, .62);
           display: flex;
           align-items: center;
           justify-content: center;
-          padding: 24px;
+          padding: 22px;
         }
-        .sale-details-modal {
-          width: min(1120px, 100%);
-          max-height: 92vh;
-          overflow-y: auto;
-          background: #fff;
-          box-shadow: 0 25px 80px rgba(0,0,0,.3);
-        }
-        .sale-details-header {
-          position: sticky;
-          top: 0;
-          z-index: 2;
+
+        .invoice-preview-modal {
+          width: min(1000px, 100%);
+          max-height: 94vh;
+          background: #f3f2ef;
+          box-shadow: 0 28px 90px rgba(0,0,0,.35);
           display: flex;
+          flex-direction: column;
+        }
+
+        .invoice-preview-toolbar {
+          flex: 0 0 auto;
+          display: flex;
+          align-items: center;
           justify-content: space-between;
           gap: 20px;
-          padding: 24px 28px;
+          padding: 18px 22px;
           background: #fff;
           border-bottom: 1px solid #ddd;
         }
-        .sale-details-header h2 {
-          margin: 5px 0;
+
+        .invoice-preview-toolbar h2 {
+          margin: 4px 0 0;
           font-family: Georgia, serif;
           font-weight: 500;
+          font-size: 22px;
         }
-        .sale-details-header p {
-          margin: 0;
-          color: #77818d;
-          font-size: 13px;
-        }
-        .sale-details-actions {
-          display: flex;
-          align-items: flex-start;
-          gap: 8px;
-        }
-        .invoice-download-button {
+
+        .invoice-preview-actions {
           display: flex;
           align-items: center;
+          gap: 8px;
+        }
+
+        .invoice-download-button {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
           gap: 8px;
           border: 0;
           background: #111;
           color: #fff;
-          padding: 12px 16px;
+          padding: 12px 17px;
           cursor: pointer;
           font-weight: 600;
         }
+
         .invoice-download-button:disabled {
           opacity: .6;
           cursor: wait;
         }
+
         .sale-details-close {
           width: 42px;
           height: 42px;
@@ -881,110 +889,299 @@ export function Analytics() {
           background: #fff;
           cursor: pointer;
         }
-        .sale-details-body {
+
+        .invoice-preview-scroll {
+          overflow: auto;
           padding: 28px;
         }
-        .sale-info-grid {
-          display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 12px;
-          margin-bottom: 24px;
+
+        .invoice-paper {
+          width: min(820px, 100%);
+          margin: 0 auto;
+          background: #fff;
+          min-height: 720px;
+          padding: 42px 48px;
+          box-shadow: 0 5px 25px rgba(0,0,0,.08);
         }
-        .sale-info-card {
-          display: flex;
-          gap: 12px;
-          border: 1px solid #e2e2e2;
-          padding: 16px;
-        }
-        .sale-info-icon {
-          width: 38px;
-          height: 38px;
-          flex: 0 0 38px;
-          display: grid;
-          place-items: center;
-          background: #f3f1ed;
-        }
-        .sale-info-card span,
-        .sale-info-card small {
-          display: block;
-        }
-        .sale-info-card span {
-          color: #7a8490;
-          font-size: 11px;
-          margin-bottom: 5px;
-        }
-        .sale-info-card small {
-          color: #89929d;
-          font-size: 11px;
-          margin-top: 5px;
-        }
-        .sale-products-section {
-          border: 1px solid #e1e1e1;
-        }
-        .sale-products-heading {
+
+        .invoice-brand-row {
           display: flex;
           justify-content: space-between;
+          gap: 30px;
+        }
+
+        .invoice-brand {
+          font-family: Georgia, serif;
+          font-size: 28px;
+          letter-spacing: 2px;
+          font-weight: 700;
+        }
+
+        .invoice-subtitle {
+          margin-top: 5px;
+          font-size: 9px;
+          letter-spacing: 2.5px;
+          color: #7c858e;
+        }
+
+        .invoice-title-block {
+          text-align: right;
+          color: #59616a;
+          font-size: 11px;
+          line-height: 1.7;
+        }
+
+        .invoice-title {
+          font-family: Georgia, serif;
+          color: #111;
+          font-size: 25px;
+          margin-bottom: 2px;
+        }
+
+        .invoice-divider {
+          height: 1px;
+          background: #222;
+          margin: 25px 0;
+        }
+
+        .invoice-customer-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 40px;
+          margin-bottom: 28px;
+        }
+
+        .invoice-customer-grid > div {
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+          font-size: 12px;
+          color: #68717b;
+        }
+
+        .invoice-customer-grid strong {
+          color: #111;
+          font-size: 14px;
+        }
+
+        .invoice-label {
+          font-size: 9px !important;
+          letter-spacing: 1.8px;
+          color: #858d95 !important;
+          margin-bottom: 2px;
+        }
+
+        .invoice-payment-box {
+          text-align: right;
+          align-items: flex-end;
+        }
+
+        .invoice-items {
+          border-top: 1px solid #222;
+          border-bottom: 1px solid #ddd;
+        }
+
+        .invoice-items-header,
+        .invoice-item-row {
+          display: grid;
+          grid-template-columns: minmax(210px, 2.4fr) .5fr 1fr .7fr 1fr;
+          gap: 12px;
           align-items: center;
-          gap: 20px;
-          padding: 18px 20px;
-          border-bottom: 1px solid #e1e1e1;
         }
-        .sale-products-heading h3 {
-          margin: 0;
+
+        .invoice-items-header {
+          padding: 11px 0;
+          border-bottom: 1px solid #ddd;
+          font-size: 9px;
+          letter-spacing: 1.3px;
+          color: #737c85;
         }
-        .sale-products-heading p {
-          margin: 5px 0 0;
-          color: #7b8490;
-          font-size: 12px;
+
+        .invoice-items-header span:not(:first-child),
+        .invoice-item-row > span:not(:first-child),
+        .invoice-item-row > strong:last-child {
+          text-align: right;
         }
-        .sale-products-heading > span {
-          color: #68727d;
-          font-size: 12px;
+
+        .invoice-item-row {
+          padding: 14px 0;
+          border-bottom: 1px solid #eee;
+          font-size: 11px;
         }
-        .sale-details-table .product-id,
-        .sale-details-table .gst-amount {
+
+        .invoice-item-row:last-child {
+          border-bottom: 0;
+        }
+
+        .invoice-item-row > div {
+          min-width: 0;
+        }
+
+        .invoice-item-row small {
           display: block;
           margin-top: 4px;
-          color: #89929d;
-          font-size: 10px;
+          color: #8a939b;
+          font-size: 8.5px;
+          line-height: 1.35;
         }
-        .sale-summary {
-          width: min(390px, 100%);
-          margin: 22px 0 0 auto;
-          border-top: 2px solid #111;
-          padding-top: 9px;
+
+        .invoice-item-row > span small {
+          text-align: right;
         }
-        .sale-summary > div {
-          display: flex;
-          justify-content: space-between;
-          padding: 6px 0;
-        }
-        .sale-summary-total {
-          margin-top: 6px;
-          padding-top: 12px !important;
-          border-top: 1px solid #ddd;
-          font-size: 18px;
-        }
-        .invoice-hint {
-          display: flex;
-          align-items: center;
-          gap: 7px;
-          margin-top: 22px;
-          padding-top: 16px;
-          border-top: 1px solid #eee;
-          color: #7b8490;
+
+        .invoice-no-items {
+          padding: 30px 0;
+          text-align: center;
+          color: #7a838c;
           font-size: 12px;
         }
-        @media (max-width: 900px) {
-          .sale-info-grid { grid-template-columns: 1fr 1fr; }
+
+        .invoice-bottom {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-end;
+          gap: 40px;
+          margin-top: 30px;
         }
-        @media (max-width: 650px) {
-          .sale-details-overlay { padding: 0; }
-          .sale-details-modal { max-height: 100vh; }
-          .sale-details-header { padding: 18px; }
-          .sale-details-body { padding: 18px; }
-          .sale-info-grid { grid-template-columns: 1fr; }
-          .sale-details-actions { flex-direction: column; }
+
+        .invoice-thank-you {
+          display: flex;
+          gap: 9px;
+          align-items: flex-start;
+          color: #737c85;
+          font-size: 10px;
+          max-width: 330px;
+        }
+
+        .invoice-thank-you strong,
+        .invoice-thank-you span {
+          display: block;
+        }
+
+        .invoice-thank-you strong {
+          color: #222;
+          margin-bottom: 4px;
+        }
+
+        .invoice-total-box {
+          width: 280px;
+          border-top: 2px solid #111;
+        }
+
+        .invoice-total-box > div {
+          display: flex;
+          justify-content: space-between;
+          gap: 20px;
+          padding: 6px 0;
+          font-size: 11px;
+        }
+
+        .invoice-grand-total {
+          border-top: 1px solid #ddd;
+          margin-top: 5px;
+          padding-top: 12px !important;
+          font-size: 17px !important;
+        }
+
+        .invoice-preview-footer {
+          flex: 0 0 auto;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 13px 22px;
+          background: #fff;
+          border-top: 1px solid #ddd;
+          color: #7b8490;
+          font-size: 11px;
+        }
+
+        .invoice-footer-download {
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          background: #111;
+          color: #fff;
+          border: 0;
+          padding: 10px 14px;
+          cursor: pointer;
+          font-weight: 600;
+        }
+
+        .invoice-footer-download:disabled {
+          opacity: .6;
+          cursor: wait;
+        }
+
+        .invoice-loading {
+          min-height: 500px;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+          gap: 8px;
+          color: #6f7881;
+        }
+
+        .invoice-loading strong {
+          color: #222;
+        }
+
+        .invoice-loading span {
+          font-size: 12px;
+        }
+
+        @media (max-width: 700px) {
+          .invoice-preview-overlay {
+            padding: 0;
+          }
+
+          .invoice-preview-modal {
+            max-height: 100vh;
+          }
+
+          .invoice-preview-scroll {
+            padding: 12px;
+          }
+
+          .invoice-paper {
+            padding: 28px 20px;
+          }
+
+          .invoice-preview-toolbar {
+            padding: 14px;
+          }
+
+          .invoice-preview-actions {
+            flex-direction: column;
+          }
+
+          .invoice-customer-grid {
+            grid-template-columns: 1fr;
+            gap: 18px;
+          }
+
+          .invoice-payment-box {
+            text-align: left;
+            align-items: flex-start;
+          }
+
+          .invoice-items {
+            overflow-x: auto;
+          }
+
+          .invoice-items-header,
+          .invoice-item-row {
+            min-width: 680px;
+          }
+
+          .invoice-bottom {
+            flex-direction: column;
+            align-items: stretch;
+          }
+
+          .invoice-total-box {
+            width: 100%;
+          }
         }
       `}</style>
 
