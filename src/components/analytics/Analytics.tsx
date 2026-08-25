@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
   Boxes,
+  CalendarDays,
   IndianRupee,
   Receipt,
   Download,
@@ -11,6 +12,7 @@ import {
   FileText,
   RefreshCw,
   ShoppingBag,
+  TrendingUp,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { jsPDF } from "jspdf";
@@ -111,7 +113,61 @@ export function Analytics() {
     return sales.filter((sale) => {
       const date = new Date(sale.created_at);
 
-    
+      return (
+        date.getFullYear() === today.getFullYear() &&
+        date.getMonth() === today.getMonth() &&
+        date.getDate() === today.getDate()
+      );
+    });
+  }, [sales]);
+
+  const todayRevenue = useMemo(
+    () =>
+      todaySales.reduce(
+        (total, sale) => total + Number(sale.total_amount || 0),
+        0,
+      ),
+    [todaySales],
+  );
+
+  const todayItems = useMemo(() => {
+    const ids = new Set(todaySales.map((sale) => sale.id));
+
+    return saleItems
+      .filter((item) => ids.has(item.sale_id))
+      .reduce((total, item) => total + Number(item.quantity || 0), 0);
+  }, [todaySales, saleItems]);
+
+  const stockValue = useMemo(
+    () =>
+      products.reduce(
+        (total, product) =>
+          total +
+          Number(product.current_stock || 0) *
+            Number(product.selling_price || 0),
+        0,
+      ),
+    [products],
+  );
+
+  const formatMoney = (value: number) =>
+    new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      maximumFractionDigits: 2,
+    }).format(value);
+
+  const dateOnly = (value: string) =>
+    new Date(value).toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+
+  const getSaleItems = (saleId: string) =>
+    saleItems.filter((item) => item.sale_id === saleId);
+
+
   const openSaleDetails = async (sale: Sale) => {
     setSelectedSale(sale);
     setSelectedSaleItems([]);
@@ -242,9 +298,12 @@ export function Analytics() {
         doc.text(`${Number(item.gst_rate || 0)}%`, 180, y, {
           align: "right",
         });
-        doc.text(formatMoney(Number(item.line_total || 0)), pageWidth - 20, y, {
-          align: "right",
-        });
+        doc.text(
+          formatMoney(Number(item.line_total || 0)),
+          pageWidth - 20,
+          y,
+          { align: "right" },
+        );
 
         y += 8;
 
@@ -280,10 +339,7 @@ export function Analytics() {
         ["Subtotal", formatMoney(Number(selectedSale.subtotal || 0))],
         ["CGST", formatMoney(cgst)],
         ["SGST", formatMoney(sgst)],
-        [
-          "Discount",
-          formatMoney(Number(selectedSale.discount_amount || 0)),
-        ],
+        ["Discount", formatMoney(Number(selectedSale.discount_amount || 0))],
       ];
 
       doc.setFontSize(10);
@@ -324,60 +380,6 @@ export function Analytics() {
       setDownloadingInvoice(false);
     }
   };
-
-  return (
-        date.getFullYear() === today.getFullYear() &&
-        date.getMonth() === today.getMonth() &&
-        date.getDate() === today.getDate()
-      );
-    });
-  }, [sales]);
-
-  const todayRevenue = useMemo(
-    () =>
-      todaySales.reduce(
-        (total, sale) => total + Number(sale.total_amount || 0),
-        0,
-      ),
-    [todaySales],
-  );
-
-  const todayItems = useMemo(() => {
-    const ids = new Set(todaySales.map((sale) => sale.id));
-
-    return saleItems
-      .filter((item) => ids.has(item.sale_id))
-      .reduce((total, item) => total + Number(item.quantity || 0), 0);
-  }, [todaySales, saleItems]);
-
-  const stockValue = useMemo(
-    () =>
-      products.reduce(
-        (total, product) =>
-          total +
-          Number(product.current_stock || 0) *
-            Number(product.selling_price || 0),
-        0,
-      ),
-    [products],
-  );
-
-  const formatMoney = (value: number) =>
-    new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-      maximumFractionDigits: 2,
-    }).format(value);
-
-  const dateOnly = (value: string) =>
-    new Date(value).toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-
-  const getSaleItems = (saleId: string) =>
-    saleItems.filter((item) => item.sale_id === saleId);
 
   return (
     <section className="analytics-page">
@@ -636,13 +638,10 @@ export function Analytics() {
                 <span className="eyebrow">TRANSACTION DETAILS</span>
                 <h2>{selectedSale.bill_number}</h2>
                 <p>
-                  {new Date(selectedSale.created_at).toLocaleString(
-                    "en-IN",
-                    {
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    },
-                  )}
+                  {new Date(selectedSale.created_at).toLocaleString("en-IN", {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  })}
                 </p>
               </div>
 
@@ -654,9 +653,7 @@ export function Analytics() {
                   disabled={downloadingInvoice || detailsLoading}
                 >
                   <Download size={16} />
-                  {downloadingInvoice
-                    ? "Creating Invoice..."
-                    : "Download Invoice"}
+                  {downloadingInvoice ? "Creating Invoice..." : "Download Invoice"}
                 </button>
 
                 <button
@@ -673,37 +670,25 @@ export function Analytics() {
             <div className="sale-details-body">
               <div className="sale-info-grid">
                 <div className="sale-info-card">
-                  <div className="sale-info-icon">
-                    <User size={18} />
-                  </div>
+                  <div className="sale-info-icon"><User size={18} /></div>
                   <div>
                     <span>Customer</span>
-                    <strong>
-                      {selectedSale.customer_name || "Walk-in Customer"}
-                    </strong>
-                    <small>
-                      {selectedSale.customer_phone || "No phone number"}
-                    </small>
+                    <strong>{selectedSale.customer_name || "Walk-in Customer"}</strong>
+                    <small>{selectedSale.customer_phone || "No phone number"}</small>
                   </div>
                 </div>
 
                 <div className="sale-info-card">
-                  <div className="sale-info-icon">
-                    <CreditCard size={18} />
-                  </div>
+                  <div className="sale-info-icon"><CreditCard size={18} /></div>
                   <div>
                     <span>Payment Method</span>
-                    <strong>
-                      {selectedSale.payment_method?.toUpperCase() || "—"}
-                    </strong>
+                    <strong>{selectedSale.payment_method?.toUpperCase() || "—"}</strong>
                     <small>Completed payment</small>
                   </div>
                 </div>
 
                 <div className="sale-info-card">
-                  <div className="sale-info-icon">
-                    <Receipt size={18} />
-                  </div>
+                  <div className="sale-info-icon"><Receipt size={18} /></div>
                   <div>
                     <span>Bill Number</span>
                     <strong>{selectedSale.bill_number}</strong>
@@ -712,14 +697,10 @@ export function Analytics() {
                 </div>
 
                 <div className="sale-info-card">
-                  <div className="sale-info-icon">
-                    <IndianRupee size={18} />
-                  </div>
+                  <div className="sale-info-icon"><IndianRupee size={18} /></div>
                   <div>
                     <span>Total Paid</span>
-                    <strong>
-                      {formatMoney(Number(selectedSale.total_amount || 0))}
-                    </strong>
+                    <strong>{formatMoney(Number(selectedSale.total_amount || 0))}</strong>
                     <small>Including GST</small>
                   </div>
                 </div>
@@ -733,11 +714,9 @@ export function Analytics() {
                   </div>
                   <span>
                     {selectedSaleItems.reduce(
-                      (total, item) =>
-                        total + Number(item.quantity || 0),
+                      (total, item) => total + Number(item.quantity || 0),
                       0,
-                    )}{" "}
-                    items
+                    )} items
                   </span>
                 </div>
 
@@ -770,30 +749,22 @@ export function Analytics() {
                           <tr key={item.id}>
                             <td>
                               <strong>{item.product_name}</strong>
-                              {item.product_id && (
-                                <small className="product-id">
-                                  ID: {item.product_id}
-                                </small>
-                              )}
+                              <small className="product-id">
+                                ID: {item.product_id}
+                              </small>
                             </td>
                             <td>{item.sku || "—"}</td>
                             <td>{item.barcode || "—"}</td>
                             <td>{item.quantity}</td>
-                            <td>
-                              {formatMoney(Number(item.unit_price || 0))}
-                            </td>
+                            <td>{formatMoney(Number(item.unit_price || 0))}</td>
                             <td>
                               {Number(item.gst_rate || 0)}%
                               <small className="gst-amount">
-                                {formatMoney(
-                                  Number(item.gst_amount || 0),
-                                )}
+                                {formatMoney(Number(item.gst_amount || 0))}
                               </small>
                             </td>
                             <td>
-                              <strong>
-                                {formatMoney(Number(item.line_total || 0))}
-                              </strong>
+                              <strong>{formatMoney(Number(item.line_total || 0))}</strong>
                             </td>
                           </tr>
                         ))}
@@ -806,55 +777,217 @@ export function Analytics() {
               <div className="sale-summary">
                 <div>
                   <span>Subtotal</span>
-                  <strong>
-                    {formatMoney(Number(selectedSale.subtotal || 0))}
-                  </strong>
+                  <strong>{formatMoney(Number(selectedSale.subtotal || 0))}</strong>
                 </div>
-
                 <div>
                   <span>CGST</span>
-                  <strong>
-                    {formatMoney(
-                      Number(selectedSale.gst_amount || 0) / 2,
-                    )}
-                  </strong>
+                  <strong>{formatMoney(Number(selectedSale.gst_amount || 0) / 2)}</strong>
                 </div>
-
                 <div>
                   <span>SGST</span>
-                  <strong>
-                    {formatMoney(
-                      Number(selectedSale.gst_amount || 0) / 2,
-                    )}
-                  </strong>
+                  <strong>{formatMoney(Number(selectedSale.gst_amount || 0) / 2)}</strong>
                 </div>
-
                 <div>
                   <span>Discount</span>
-                  <strong>
-                    {formatMoney(
-                      Number(selectedSale.discount_amount || 0),
-                    )}
-                  </strong>
+                  <strong>{formatMoney(Number(selectedSale.discount_amount || 0))}</strong>
                 </div>
-
                 <div className="sale-summary-total">
                   <span>Total</span>
-                  <strong>
-                    {formatMoney(Number(selectedSale.total_amount || 0))}
-                  </strong>
+                  <strong>{formatMoney(Number(selectedSale.total_amount || 0))}</strong>
                 </div>
               </div>
 
               <div className="invoice-hint">
                 <FileText size={16} />
-                Click <strong>Download Invoice</strong> to save this exact
-                transaction as a PDF.
+                Click <strong>Download Invoice</strong> to save this transaction as a PDF.
               </div>
             </div>
           </div>
         </div>
       )}
+
+      <style>{`
+        .sale-clickable-row {
+          cursor: pointer !important;
+          transition: background-color .15s ease;
+        }
+        .sale-clickable-row:hover {
+          background: #faf8f4 !important;
+        }
+        .sale-details-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 99999;
+          background: rgba(0,0,0,.58);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 24px;
+        }
+        .sale-details-modal {
+          width: min(1120px, 100%);
+          max-height: 92vh;
+          overflow-y: auto;
+          background: #fff;
+          box-shadow: 0 25px 80px rgba(0,0,0,.3);
+        }
+        .sale-details-header {
+          position: sticky;
+          top: 0;
+          z-index: 2;
+          display: flex;
+          justify-content: space-between;
+          gap: 20px;
+          padding: 24px 28px;
+          background: #fff;
+          border-bottom: 1px solid #ddd;
+        }
+        .sale-details-header h2 {
+          margin: 5px 0;
+          font-family: Georgia, serif;
+          font-weight: 500;
+        }
+        .sale-details-header p {
+          margin: 0;
+          color: #77818d;
+          font-size: 13px;
+        }
+        .sale-details-actions {
+          display: flex;
+          align-items: flex-start;
+          gap: 8px;
+        }
+        .invoice-download-button {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          border: 0;
+          background: #111;
+          color: #fff;
+          padding: 12px 16px;
+          cursor: pointer;
+          font-weight: 600;
+        }
+        .invoice-download-button:disabled {
+          opacity: .6;
+          cursor: wait;
+        }
+        .sale-details-close {
+          width: 42px;
+          height: 42px;
+          display: grid;
+          place-items: center;
+          border: 1px solid #ddd;
+          background: #fff;
+          cursor: pointer;
+        }
+        .sale-details-body {
+          padding: 28px;
+        }
+        .sale-info-grid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 12px;
+          margin-bottom: 24px;
+        }
+        .sale-info-card {
+          display: flex;
+          gap: 12px;
+          border: 1px solid #e2e2e2;
+          padding: 16px;
+        }
+        .sale-info-icon {
+          width: 38px;
+          height: 38px;
+          flex: 0 0 38px;
+          display: grid;
+          place-items: center;
+          background: #f3f1ed;
+        }
+        .sale-info-card span,
+        .sale-info-card small {
+          display: block;
+        }
+        .sale-info-card span {
+          color: #7a8490;
+          font-size: 11px;
+          margin-bottom: 5px;
+        }
+        .sale-info-card small {
+          color: #89929d;
+          font-size: 11px;
+          margin-top: 5px;
+        }
+        .sale-products-section {
+          border: 1px solid #e1e1e1;
+        }
+        .sale-products-heading {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 20px;
+          padding: 18px 20px;
+          border-bottom: 1px solid #e1e1e1;
+        }
+        .sale-products-heading h3 {
+          margin: 0;
+        }
+        .sale-products-heading p {
+          margin: 5px 0 0;
+          color: #7b8490;
+          font-size: 12px;
+        }
+        .sale-products-heading > span {
+          color: #68727d;
+          font-size: 12px;
+        }
+        .sale-details-table .product-id,
+        .sale-details-table .gst-amount {
+          display: block;
+          margin-top: 4px;
+          color: #89929d;
+          font-size: 10px;
+        }
+        .sale-summary {
+          width: min(390px, 100%);
+          margin: 22px 0 0 auto;
+          border-top: 2px solid #111;
+          padding-top: 9px;
+        }
+        .sale-summary > div {
+          display: flex;
+          justify-content: space-between;
+          padding: 6px 0;
+        }
+        .sale-summary-total {
+          margin-top: 6px;
+          padding-top: 12px !important;
+          border-top: 1px solid #ddd;
+          font-size: 18px;
+        }
+        .invoice-hint {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          margin-top: 22px;
+          padding-top: 16px;
+          border-top: 1px solid #eee;
+          color: #7b8490;
+          font-size: 12px;
+        }
+        @media (max-width: 900px) {
+          .sale-info-grid { grid-template-columns: 1fr 1fr; }
+        }
+        @media (max-width: 650px) {
+          .sale-details-overlay { padding: 0; }
+          .sale-details-modal { max-height: 100vh; }
+          .sale-details-header { padding: 18px; }
+          .sale-details-body { padding: 18px; }
+          .sale-info-grid { grid-template-columns: 1fr; }
+          .sale-details-actions { flex-direction: column; }
+        }
+      `}</style>
+
     </section>
   );
 }
