@@ -85,6 +85,11 @@ export function Billing() {
 
   const [discount, setDiscount] = useState("0");
 
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [customerFound, setCustomerFound] = useState(false);
+  const [customerSearching, setCustomerSearching] = useState(false);
+
   const [showPayment, setShowPayment] = useState(false);
   const [paymentMethod, setPaymentMethod] =
     useState<PaymentMethod>("cash");
@@ -142,6 +147,53 @@ useEffect(() => {
     }
   };
 }, []);
+
+useEffect(() => {
+  const phone = customerPhone.trim();
+
+  setCustomerFound(false);
+
+  if (phone.length !== 10) {
+    setCustomerSearching(false);
+    return;
+  }
+
+  let cancelled = false;
+
+  const findCustomer = async () => {
+    setCustomerSearching(true);
+
+    const { data, error } = await supabase
+      .from("customers")
+      .select("id,name,phone")
+      .eq("phone", phone)
+      .maybeSingle();
+
+    if (cancelled) return;
+
+    setCustomerSearching(false);
+
+    if (error) {
+      console.error("Customer lookup error:", error);
+      return;
+    }
+
+    if (data) {
+      setCustomerName(data.name || "");
+      setCustomerFound(true);
+    } else {
+      setCustomerName("");
+      setCustomerFound(false);
+    }
+  };
+
+  const timer = setTimeout(findCustomer, 400);
+
+  return () => {
+    cancelled = true;
+    clearTimeout(timer);
+  };
+}, [customerPhone]);
   /*
    * ---------------------------------------------------------
    * SEARCH
@@ -190,6 +242,9 @@ useEffect(() => {
       );
     }, 0);
   }, [cart]);
+
+  const cgst = useMemo(() => gst / 2, [gst]);
+  const sgst = useMemo(() => gst / 2, [gst]);
 
   const discountAmount = useMemo(() => {
     const value = Number(discount);
@@ -539,6 +594,9 @@ const openBarcodeScanner = () => {
   const clearCart = () => {
     setCart([]);
     setDiscount("0");
+    setCustomerName("");
+    setCustomerPhone("");
+    setCustomerFound(false);
     setError("");
     setSuccess("");
   };
@@ -554,6 +612,19 @@ const openBarcodeScanner = () => {
       setError(
         "Add at least one product before payment.",
       );
+      return;
+    }
+
+    const phone = customerPhone.trim();
+    const name = customerName.trim();
+
+    if (phone && !/^\d{10}$/.test(phone)) {
+      setError("Please enter a valid 10-digit customer phone number.");
+      return;
+    }
+
+    if (phone && !name) {
+      setError("Please enter the customer name.");
       return;
     }
 
@@ -577,6 +648,55 @@ const openBarcodeScanner = () => {
   setSuccess("");
 
   try {
+    const savedCustomerName = customerName.trim();
+    const savedCustomerPhone = customerPhone.trim();
+
+    if (savedCustomerPhone) {
+      const { data: existingCustomer, error: customerLookupError } =
+        await supabase
+          .from("customers")
+          .select("id,name,phone")
+          .eq("phone", savedCustomerPhone)
+          .maybeSingle();
+
+      if (customerLookupError) {
+        throw new Error(
+          `Customer lookup failed: ${customerLookupError.message}`,
+        );
+      }
+
+      if (existingCustomer) {
+        if (savedCustomerName && savedCustomerName !== existingCustomer.name) {
+          const { error: customerUpdateError } = await supabase
+            .from("customers")
+            .update({
+              name: savedCustomerName,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", existingCustomer.id);
+
+          if (customerUpdateError) {
+            throw new Error(
+              `Customer update failed: ${customerUpdateError.message}`,
+            );
+          }
+        }
+      } else {
+        const { error: customerInsertError } = await supabase
+          .from("customers")
+          .insert({
+            name: savedCustomerName,
+            phone: savedCustomerPhone,
+          });
+
+        if (customerInsertError) {
+          throw new Error(
+            `Customer creation failed: ${customerInsertError.message}`,
+          );
+        }
+      }
+    }
+
     /*
      * Send only product IDs + quantities.
      *
@@ -617,6 +737,22 @@ const openBarcodeScanner = () => {
 
     const sale = data[0];
 
+    if (savedCustomerPhone || savedCustomerName) {
+      const { error: saleCustomerError } = await supabase
+        .from("sales")
+        .update({
+          customer_name: savedCustomerName || null,
+          customer_phone: savedCustomerPhone || null,
+        })
+        .eq("id", sale.sale_id);
+
+      if (saleCustomerError) {
+        throw new Error(
+          `Sale customer update failed: ${saleCustomerError.message}`,
+        );
+      }
+    }
+
     /*
      * Only show success AFTER the database confirms
      * the complete transaction.
@@ -634,6 +770,9 @@ const openBarcodeScanner = () => {
      */
     setCart([]);
     setDiscount("0");
+    setCustomerName("");
+    setCustomerPhone("");
+    setCustomerFound(false);
 
     /*
      * Refresh products so the new stock is immediately visible.
@@ -909,6 +1048,100 @@ const openBarcodeScanner = () => {
         </div>
 
         <aside className="bill-panel">
+          <div
+            style={{
+              padding: "18px 20px",
+              borderBottom: "1px solid #e5e5e5",
+              background: "#fff",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "11px",
+                letterSpacing: "2px",
+                textTransform: "uppercase",
+                color: "#777",
+                marginBottom: "12px",
+              }}
+            >
+              Customer Details
+            </div>
+
+            <div style={{ display: "grid", gap: "10px" }}>
+              <input
+                type="tel"
+                inputMode="numeric"
+                maxLength={10}
+                value={customerPhone}
+                onChange={(event) => {
+                  const value = event.target.value
+                    .replace(/\D/g, "")
+                    .slice(0, 10);
+
+                  setCustomerPhone(value);
+
+                  if (value.length < 10) {
+                    setCustomerName("");
+                    setCustomerFound(false);
+                  }
+                }}
+                placeholder="Customer phone number"
+                autoComplete="tel"
+                style={{
+                  width: "100%",
+                  padding: "11px 12px",
+                  border: "1px solid #ddd",
+                  fontSize: "14px",
+                  boxSizing: "border-box",
+                }}
+              />
+
+              <input
+                type="text"
+                value={customerName}
+                onChange={(event) => {
+                  setCustomerName(event.target.value);
+                  setCustomerFound(false);
+                }}
+                placeholder="Customer name"
+                autoComplete="name"
+                style={{
+                  width: "100%",
+                  padding: "11px 12px",
+                  border: "1px solid #ddd",
+                  fontSize: "14px",
+                  boxSizing: "border-box",
+                }}
+              />
+
+              {customerSearching && (
+                <span style={{ fontSize: "12px", color: "#777" }}>
+                  Searching customer...
+                </span>
+              )}
+
+              {!customerSearching && customerFound && (
+                <span
+                  style={{
+                    fontSize: "12px",
+                    color: "#246b36",
+                    fontWeight: 600,
+                  }}
+                >
+                  ✓ Existing customer found
+                </span>
+              )}
+
+              {!customerSearching &&
+                customerPhone.length === 10 &&
+                !customerFound && (
+                  <span style={{ fontSize: "12px", color: "#777" }}>
+                    New customer
+                  </span>
+                )}
+            </div>
+          </div>
+
           <div className="bill-panel-header">
             <div>
               <h3>
@@ -978,7 +1211,7 @@ const openBarcodeScanner = () => {
                     </b>
 
                     <small>
-                      GST {item.gstRate}%
+                      CGST {(item.gstRate / 2).toFixed(2)}% • SGST {(item.gstRate / 2).toFixed(2)}%
                     </small>
                   </div>
 
@@ -1055,11 +1288,20 @@ const openBarcodeScanner = () => {
             </div>
 
             <div>
-              <span>GST</span>
+              <span>CGST</span>
 
               <strong>
                 ₹
-                {gst.toFixed(2)}
+                {cgst.toFixed(2)}
+              </strong>
+            </div>
+
+            <div>
+              <span>SGST</span>
+
+              <strong>
+                ₹
+                {sgst.toFixed(2)}
               </strong>
             </div>
 
@@ -1266,6 +1508,72 @@ const openBarcodeScanner = () => {
                   "28px 24px",
               }}
             >
+              {(customerName || customerPhone) && (
+                <div
+                  style={{
+                    marginBottom: "22px",
+                    padding: "14px 16px",
+                    border: "1px solid #e5e5e5",
+                    background: "#fafafa",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "10px",
+                      letterSpacing: "2px",
+                      textTransform: "uppercase",
+                      color: "#777",
+                      marginBottom: "7px",
+                    }}
+                  >
+                    Customer
+                  </div>
+                  <strong style={{ display: "block", fontSize: "15px" }}>
+                    {customerName || "Customer"}
+                  </strong>
+                  {customerPhone && (
+                    <span
+                      style={{
+                        display: "block",
+                        marginTop: "3px",
+                        color: "#777",
+                        fontSize: "13px",
+                      }}
+                    >
+                      {customerPhone}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              <div
+                style={{
+                  display: "grid",
+                  gap: "8px",
+                  marginBottom: "24px",
+                  fontSize: "14px",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span>Subtotal</span>
+                  <strong>₹{subtotal.toFixed(2)}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span>CGST</span>
+                  <strong>₹{cgst.toFixed(2)}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span>SGST</span>
+                  <strong>₹{sgst.toFixed(2)}</strong>
+                </div>
+                {discountAmount > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span>Discount</span>
+                    <strong>-₹{discountAmount.toFixed(2)}</strong>
+                  </div>
+                )}
+              </div>
+
               <div
                 style={{
                   textAlign:
