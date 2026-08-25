@@ -638,8 +638,14 @@ const openBarcodeScanner = () => {
    * ---------------------------------------------------------
    */
 
- const completePayment = async () => {
+const completePayment = async () => {
+  console.log("=== PAYMENT STARTED ===");
+
   if (cart.length === 0 || processing) {
+    console.log("Payment blocked:", {
+      cartLength: cart.length,
+      processing,
+    });
     return;
   }
 
@@ -651,7 +657,20 @@ const openBarcodeScanner = () => {
     const savedCustomerName = customerName.trim();
     const savedCustomerPhone = customerPhone.trim();
 
+    console.log("Customer:", {
+      name: savedCustomerName,
+      phone: savedCustomerPhone,
+    });
+
+    console.log("Cart:", cart);
+
+    // ---------------------------------------------------------
+    // 1. SAVE / UPDATE CUSTOMER
+    // ---------------------------------------------------------
+
     if (savedCustomerPhone) {
+      console.log("Looking for customer:", savedCustomerPhone);
+
       const { data: existingCustomer, error: customerLookupError } =
         await supabase
           .from("customers")
@@ -659,14 +678,24 @@ const openBarcodeScanner = () => {
           .eq("phone", savedCustomerPhone)
           .maybeSingle();
 
+      console.log("Customer lookup result:", {
+        existingCustomer,
+        customerLookupError,
+      });
+
       if (customerLookupError) {
         throw new Error(
-          `Customer lookup failed: ${customerLookupError.message}`,
+          `Customer lookup failed: ${customerLookupError.message}`
         );
       }
 
       if (existingCustomer) {
-        if (savedCustomerName && savedCustomerName !== existingCustomer.name) {
+        console.log("Existing customer found:", existingCustomer);
+
+        if (
+          savedCustomerName &&
+          savedCustomerName !== existingCustomer.name
+        ) {
           const { error: customerUpdateError } = await supabase
             .from("customers")
             .update({
@@ -675,13 +704,17 @@ const openBarcodeScanner = () => {
             })
             .eq("id", existingCustomer.id);
 
+          console.log("Customer update:", customerUpdateError);
+
           if (customerUpdateError) {
             throw new Error(
-              `Customer update failed: ${customerUpdateError.message}`,
+              `Customer update failed: ${customerUpdateError.message}`
             );
           }
         }
       } else {
+        console.log("Creating new customer...");
+
         const { error: customerInsertError } = await supabase
           .from("customers")
           .insert({
@@ -689,10 +722,132 @@ const openBarcodeScanner = () => {
             phone: savedCustomerPhone,
           });
 
+        console.log("Customer insert:", customerInsertError);
+
         if (customerInsertError) {
           throw new Error(
-            `Customer creation failed: ${customerInsertError.message}`,
+            `Customer creation failed: ${customerInsertError.message}`
           );
+        }
+      }
+    }
+
+    // ---------------------------------------------------------
+    // 2. PREPARE ITEMS
+    // ---------------------------------------------------------
+
+    const items = cart.map((item) => ({
+      id: item.id,
+      quantity: item.quantity,
+    }));
+
+    console.log("Sending items to create_orderly_sale:", items);
+
+    console.log("Discount:", Number(discount) || 0);
+    console.log("Payment method:", paymentMethod);
+
+    // ---------------------------------------------------------
+    // 3. CREATE SALE
+    // ---------------------------------------------------------
+
+    console.log("Calling create_orderly_sale...");
+
+    const { data, error: rpcError } = await supabase.rpc(
+      "create_orderly_sale",
+      {
+        p_items: items,
+        p_discount: Number(discount) || 0,
+        p_payment_method: paymentMethod,
+      }
+    );
+
+    console.log("RPC RESPONSE:", {
+      data,
+      rpcError,
+    });
+
+    if (rpcError) {
+      throw new Error(
+        `Sale creation failed: ${rpcError.message}`
+      );
+    }
+
+    if (!data || data.length === 0) {
+      throw new Error(
+        "Sale was not created. The database returned no sale."
+      );
+    }
+
+    const sale = data[0];
+
+    console.log("SALE CREATED:", sale);
+
+    // ---------------------------------------------------------
+    // 4. SAVE CUSTOMER ON SALE
+    // ---------------------------------------------------------
+
+    if (savedCustomerPhone || savedCustomerName) {
+      console.log("Updating sale with customer details...");
+
+      const { error: saleCustomerError } = await supabase
+        .from("sales")
+        .update({
+          customer_name: savedCustomerName || null,
+          customer_phone: savedCustomerPhone || null,
+        })
+        .eq("id", sale.sale_id);
+
+      console.log("Sale customer update:", saleCustomerError);
+
+      if (saleCustomerError) {
+        throw new Error(
+          `Sale customer update failed: ${saleCustomerError.message}`
+        );
+      }
+    }
+
+    // ---------------------------------------------------------
+    // 5. SUCCESS
+    // ---------------------------------------------------------
+
+    console.log("=== PAYMENT SUCCESS ===");
+
+    setShowPayment(false);
+
+    setSuccess(
+      `Orderly bill ${sale.bill_number} created successfully. Total ₹${Number(
+        sale.total_amount
+      ).toFixed(2)} via ${paymentMethod.toUpperCase()}.`
+    );
+
+    setCart([]);
+    setDiscount("0");
+    setCustomerName("");
+    setCustomerPhone("");
+    setCustomerFound(false);
+
+    await loadProducts();
+
+    setTimeout(() => {
+      setSuccess("");
+    }, 6000);
+
+  } catch (unknownError) {
+    console.error("=== PAYMENT FAILED ===", unknownError);
+
+    const message =
+      unknownError instanceof Error
+        ? unknownError.message
+        : "Payment could not be completed.";
+
+    setError(message);
+
+    // Keep payment modal open so the error can be seen.
+  } finally {
+    console.log("=== PAYMENT FINISHED ===");
+    setProcessing(false);
+  }
+};
         }
       }
     }
